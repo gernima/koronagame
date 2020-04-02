@@ -18,3 +18,4 @@ def send_text(message):
 
 bot.polling()
 
+print(1)
