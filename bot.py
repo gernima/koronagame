@@ -226,17 +226,14 @@ def bunker(message):
     bot.send_message(message.chat.id, f'Локация: Бункер\nДень {a[message.chat.id]["day"]}',
                      reply_markup=get_bunker_keyboard(message.chat.id))
 
+
+time_list = {}
 user_list = []
 weight_list = {}
-time_list = {}
 morph = pymorphy2.MorphAnalyzer().parse
 FOOD = {'vodka': ('водка', 1), 'mask': ('маска', 3), 'medicinechest': ('аптечка', 3), 'soap': ('мыло', 3), 'sausage': ('колбаса', 3)}
 package = {}
-weight = 10
-time_list = []
-user_list = []
-weight_list = {}
-time_list = {}
+
 
 
 @bot.message_handler(commands=['start', 'new_game'])
@@ -284,7 +281,7 @@ def callback(call):
             print(e, call.message.chat.id, call.message.message_id)
         if type == 'yes':
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton(text='Спяртаться', callback_data='play_start'),
+            markup.add(types.InlineKeyboardButton(text='Спрятаться', callback_data='play_start'),
                        types.InlineKeyboardButton(text='Сдаться', callback_data='play_end'))
             bot.send_message(call.message.chat.id, 'Приготовься выживать в новом мире, которому грозит пандемия, вы решаетесь спрятаться в бункере, у тебя есть 60 секунд чтобы собрать все вещи до того как приедет полиция из-за подозрений на заражение', reply_markup=markup)
         elif type == 'no':
