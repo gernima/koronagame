@@ -27,21 +27,24 @@ def bd_family(chat_id, data):
 
 
 def get_data_from_bd(chat_id):
-    if chat_id not in a.keys():
-        a[chat_id] = a[0]
-    q = """Select {} from {} where chat_id == {}"""
-    bd_family(chat_id, list(cur.execute(q.format('*', 'dad', chat_id)).fetchone()[1:]))
-    bd_family(chat_id, list(cur.execute(q.format('*', 'mother', chat_id)).fetchone()[1:]))
-    bd_family(chat_id, list(cur.execute(q.format('*', 'brother', chat_id)).fetchone()[1:]))
-    bd_family(chat_id, list(cur.execute(q.format('*', 'sister', chat_id)).fetchone()[1:]))
+    try:
+        if chat_id not in a.keys():
+            a[chat_id] = a[0]
+        q = """Select {} from {} where chat_id == {}"""
+        bd_family(chat_id, list(cur.execute(q.format('*', 'dad', chat_id)).fetchone()[1:]))
+        bd_family(chat_id, list(cur.execute(q.format('*', 'mother', chat_id)).fetchone()[1:]))
+        bd_family(chat_id, list(cur.execute(q.format('*', 'brother', chat_id)).fetchone()[1:]))
+        bd_family(chat_id, list(cur.execute(q.format('*', 'sister', chat_id)).fetchone()[1:]))
 
-    a[chat_id]['inventory'] = str(cur.execute(q.format('inventory', 'saves', chat_id)).fetchone()[0]).split(';')
-    a[chat_id]['name'] = cur.execute(q.format('name', 'saves', chat_id)).fetchone()[0]
-    a[chat_id]['mom'] = cur.execute(q.format('mom', 'saves', chat_id)).fetchone()[0]
-    a[chat_id]['dad'] = cur.execute(q.format('dad', 'saves', chat_id)).fetchone()[0]
-    a[chat_id]['brother'] = cur.execute(q.format('brother', 'saves', chat_id)).fetchone()[0]
-    a[chat_id]['sister'] = cur.execute(q.format('sister', 'saves', chat_id)).fetchone()[0]
-    a[chat_id]['day'] = cur.execute(q.format('day', 'saves', chat_id)).fetchone()[0]
+        a[chat_id]['inventory'] = str(cur.execute(q.format('inventory', 'saves', chat_id)).fetchone()[0]).split(';')
+        a[chat_id]['name'] = cur.execute(q.format('name', 'saves', chat_id)).fetchone()[0]
+        a[chat_id]['mom'] = cur.execute(q.format('mom', 'saves', chat_id)).fetchone()[0]
+        a[chat_id]['dad'] = cur.execute(q.format('dad', 'saves', chat_id)).fetchone()[0]
+        a[chat_id]['brother'] = cur.execute(q.format('brother', 'saves', chat_id)).fetchone()[0]
+        a[chat_id]['sister'] = cur.execute(q.format('sister', 'saves', chat_id)).fetchone()[0]
+        a[chat_id]['day'] = cur.execute(q.format('day', 'saves', chat_id)).fetchone()[0]
+    except:
+        pass
 
 
 def get_bunker_keyboard(chat_id):
@@ -145,11 +148,14 @@ def bunker_logic(call):
                               text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
                               reply_markup=get_bunker_keyboard(call.from_user.id))
     elif call.data == 'bunker_next_day':
-        a[call.from_user.id]['day'] += 1
-        save_update_to_bd(call.from_user.id)
-        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
-                              text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
-                              reply_markup=get_bunker_keyboard(call.from_user.id))
+        try:
+            a[call.from_user.id]['day'] += 1
+            save_update_to_bd(call.from_user.id)
+            bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                                  text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
+                                  reply_markup=get_bunker_keyboard(call.from_user.id))
+        except:
+            pass
 
 
 def save_update_to_bd(chat_id, inv=None):
