@@ -41,33 +41,42 @@ def items():
     return murkup
 
 
-def time_(call):
+def time_(call, user):
     second = 60
-    sms = bot.send_message(call.message.chat.id, 'У тебя осталось {} {} и {} енергии'.format(
-            second, morph('секунда')[0].make_agree_with_number(second).word, weight), reply_markup=items())
-    while second != 0:
-        if weight == 0:
-            bot.delete_message(chat_id=sms.chat.id,  message_id=sms.message_id)
-            return
+    sms = bot.send_message(call.message.chat.id, 'У тебя осталось {} {} и {} места'.format(
+            second, morph('секунда')[0].make_agree_with_number(second).word, weight_list[user]), reply_markup=items())
+    while second > 0:
         time.sleep(1)
         second -= 1
         bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id,
-            text='У тебя осталось {} {}  и {} енергии'.format(
-                second, morph('секунда')[0].make_agree_with_number(second).word, weight), reply_markup=items())
-    bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id, text='Время вышло')
-    print(package)
+            text='У тебя осталось {} {}  и {} места'.format(
+                second, morph('секунда')[0].make_agree_with_number(second).word, weight_list[user]), reply_markup=items())
+        if weight_list[user] == 0 or second == 0:
+            bot.send_message(call.message.chat.id, 'Вот что вы взяли с собой:\n' + '\n'.join(
+                '{}. {}'.format(i + 1, item) for i, item in enumerate(package.get(user, ['Пусто']))))
+            bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id, text='Время закончилось' if second == 0 else 'Место закончилось')
+            markup = types.ReplyKeyboardMarkup(True)
+            markup.add(
+                types.InlineKeyboardButton('Донат'),
+                types.InlineKeyboardButton('Поддержка'),
+                types.InlineKeyboardButton('Помощь новичкам')
+            )
+            bot.send_message(call.message.chat.id, 'Пора в бункер', reply_markup=markup)
+            bunker(call.message)
+            print('сумка ', package[user])
+            return
     #  save BD package
 
 
 def bunker(message):
-    bot.send_message(message.chat.id, '😕😌🤨😔', reply_markup=bunker1)
+    bot.send_message(message.chat.id, 'Локация: Бункер', reply_markup=bunker1)
 
 
 morph = pymorphy2.MorphAnalyzer().parse
 FOOD = {'vodka': ('водка', 1), 'mask': ('маска', 3), 'medicinechest': ('аптечка', 3), 'soap': ('мыло', 3), 'sausage': ('колбаса', 3)}
 package = {}
-weight = 10
 user_list = []
+weight_list = {}
 time_list = {}
 bunker1 = telebot.types.InlineKeyboardMarkup(row_width=5)
 bunker1.add(telebot.types.InlineKeyboardButton(text='Папа', callback_data='bunker_dad'),
@@ -78,24 +87,37 @@ bunker1.add(telebot.types.InlineKeyboardButton(text='Выход в пустош�
 bunker1.add(telebot.types.InlineKeyboardButton(text='Журнал', callback_data='bunker_journal'))
 
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start', 'new_game'])
 def start_message(message):
-    laste_name = message.from_user.last_name
-    if not laste_name:
-        laste_name = ''
-    name = message.from_user.first_name + ' ' + laste_name
-    murkup = types.InlineKeyboardMarkup(row_width=2)
-    item_1 = types.InlineKeyboardButton('Да', callback_data='play_yes')
-    item_2 = types.InlineKeyboardButton('Нет', callback_data='play_no')
-    murkup.add(item_1, item_2)
-    bot.send_message(message.chat.id, '{}, ты выжил?\nРешишься сыграть в игру?'.format(name), reply_markup=murkup)
-    user_list.append(message.from_user.username)
-    print(user_list)
+    if message.text == '/start':
+        laste_name = message.from_user.last_name
+        if not laste_name:
+            laste_name = ''
+        name = message.from_user.first_name + ' ' + laste_name
+        murkup = types.InlineKeyboardMarkup(row_width=2)
+        item_1 = types.InlineKeyboardButton('Да', callback_data='play_yes')
+        item_2 = types.InlineKeyboardButton('Нет', callback_data='play_no')
+        murkup.add(item_1, item_2)
+        bot.send_message(message.chat.id, '{}, ты выжил?\nРешишься сыграть в игру?'.format(name), reply_markup=murkup)
+        user_list.append(message.from_user.username)
+        print("Список пользователей", user_list)
+    elif message.text == '/new_game':
+        murkup = types.InlineKeyboardMarkup(row_width=2)
+        item_1 = types.InlineKeyboardButton('Да', callback_data='play_start')
+        item_2 = types.InlineKeyboardButton('Нет', callback_data='play_continue')
+        murkup.add(item_1, item_2)
+        bot.send_message(message.chat.id, 'Ты точно хочешь начать все с начала?', reply_markup=murkup)
+
+
+@bot.message_handler(content_types=['text'])
+def send_text(message):
+    if message.text.lower() == '1':
+        bunker(message)
 
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
-    global weight
+    global weight_list
     user = call.from_user.username
     name = call.data
     name_type = name.split('_')[0]
@@ -119,23 +141,22 @@ def callback(call):
                              reply_markup=murkup)
         elif type == 'start':
             print('Счетчик: ' + call.from_user.username)
-            thread1 = Thread(target=time_, args=(call,))
+            weight_list[user] = 20
+            thread1 = Thread(target=time_, args=(call, user))
             thread1.start()
             time_list[call.from_user.username] = thread1
         elif type == 'end':
             bot.send_message(call.message.chat.id, 'Справедливо, но из-за этого вы уже реально заразились в общей больнице, а ведь могли рискнуть и выжить')
+        elif type == 'continue':
+            pass
     elif name_type == 'item':
         item = name.split('_')[1]
-        if weight != 0:
-            if weight - FOOD[item][1] < 0:
-                bot.answer_callback_query(callback_query_id=call.id, text='Недостаточно энергии')
+        if weight_list[user] != 0:
+            if weight_list[user] - FOOD[item][1] < 0:
+                bot.answer_callback_query(callback_query_id=call.id, text='Недостаточно места')
             else:
                 package[call.from_user.username] = package.get(call.from_user.username, []) + [FOOD[item][0]]
-                weight -= FOOD[item][1]
-                if weight == 0:
-                    bot.send_message(call.message.chat.id, 'Сумка собрана:\n' + '\n'.join('{}. {}'.format(i + 1, item) for i, item in enumerate(package[user])))
-                    bot.send_message(call.message.chat.id, 'Пора в бункер')
-                    bunker(call.message)
+                weight_list[user] -= FOOD[item][1]
                 bot.answer_callback_query(callback_query_id=call.id, text='Мы положили в сумку: {}'.format(morph(FOOD[item][0])[0].inflect({'accs'}).word))
 
 
