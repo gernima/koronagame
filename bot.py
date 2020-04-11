@@ -4,8 +4,9 @@ from telebot import types
 from threading import Thread
 import pymorphy2
 import sqlite3
+from random import choice
 
-bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
+bot = telebot.TeleBot('1049041175:AAFHw6FXE2-yCv7L4sJmwg50eImuAusJOG0')
 print('start')
 return_family_menu = telebot.types.InlineKeyboardMarkup()
 return_family_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
@@ -17,6 +18,82 @@ a = {0: {'inventory': [], 'name': 'a', 'mom': 1, 'dad': 1, 'brother': 1, 'sister
          'sister_bd': {'mood': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😔'}}}
 con = sqlite3.connect("bd.db", check_same_thread=False)
 cur = con.cursor()
+
+
+@bot.callback_query_handler(func=lambda call: 'event' in call.data)
+def event_logic(call):
+    data = call.data.split('_')[2]
+    event_id = call.data.split('_')[1]
+    activation_butts = list(
+        cur.execute("""Select activation_butt from events Where event_id == {}""".format(event_id)).fetchone())
+    if data in activation_butts:
+        if cur.execute("""Select for_dad from events Where event_id == {}""".format(event_id)).fetchone()[0]:
+            event_family('dad', event_id, call.from_user.id, True)
+        if cur.execute("""Select for_mother from events Where event_id == {}""".format(event_id)).fetchone()[0]:
+            event_family('mother', event_id, call.from_user.id, True)
+        if cur.execute("""Select for_sister from events Where event_id == {}""".format(event_id)).fetchone()[0]:
+            event_family('sister', event_id, call.from_user.id, True)
+        if cur.execute("""Select for_brother from events Where event_id == {}""".format(event_id)).fetchone()[0]:
+            event_family('brother', event_id, call.from_user.id, True)
+        if_died_family(event_id, call.from_user.id, True)
+        event_items(event_id, call.from_user.id, True)
+    else:
+        if cur.execute("""Select for_dad from events Where event_id == {}""".format(event_id)).fetchone()[0]:
+            event_family('dad', event_id, call.from_user.id, False)
+        if cur.execute("""Select for_mother from events Where event_id == {}""".format(event_id)).fetchone()[0]:
+            event_family('mother', event_id, call.from_user.id, False)
+        if cur.execute("""Select for_sister from events Where event_id == {}""".format(event_id)).fetchone()[0]:
+            event_family('sister', event_id, call.from_user.id, False)
+        if cur.execute("""Select for_brother from events Where event_id == {}""".format(event_id)).fetchone()[0]:
+            event_family('brother', event_id, call.from_user.id, False)
+        if_died_family(event_id, call.from_user.id, False)
+        event_items(event_id, call.from_user.id, False)
+    save_update_to_bd(call.from_user.id)
+    bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                          text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
+                          reply_markup=get_bunker_keyboard(call.from_user.id))
+
+
+def event_items(event_id, chat_id, plus):
+    if plus:
+        bd_items = cur.execute("""Select items_plus from events Where event_id == {}""".format(event_id)).fetchone()[0].split(';')
+        for item in bd_items:
+            a[chat_id]['inventory'].append(item)
+    else:
+        bd_items = cur.execute("""Select items_minus from events Where event_id == {}""".format(event_id)).fetchone()[0].split(';')
+        for item in bd_items:
+            if item in a[chat_id]['inventory']:
+                a[chat_id]['inventory'].remove(item)
+
+
+def if_died_family(event_id, chat_id, plus):
+    if plus:
+        x = '_plus'
+    else:
+        x = '_minus'
+    if cur.execute("""Select died_dad{} from events Where event_id == {}""".format(x, event_id)).fetchone()[0]:
+        a[chat_id]['dad'] = 0
+    if cur.execute("""Select died_mother{} from events Where event_id == {}""".format(x, event_id)).fetchone()[0]:
+        a[chat_id]['mother'] = 0
+    if cur.execute("""Select died_sister{} from events Where event_id == {}""".format(x, event_id)).fetchone()[0]:
+        a[chat_id]['sister'] = 0
+    if cur.execute("""Select died_brother{} from events Where event_id == {}""".format(x, event_id)).fetchone()[0]:
+        a[chat_id]['brother'] = 0
+
+
+def event_family(who, event_id, chat_id, plus):
+    if plus:
+        x = '_plus'
+    else:
+        x = '_minus'
+    a[chat_id][who + '_bd']['hungry'] += int(
+        cur.execute("""Select hungry{} from events Where event_id == {}""".format(x, event_id)).fetchone()[0])
+    a[chat_id][who + '_bd']['water'] += int(
+        cur.execute("""Select water{} from events Where event_id == {}""".format(x, event_id)).fetchone()[0])
+    a[chat_id][who + '_bd']['mood'] += int(
+        cur.execute("""Select mood{} from events Where event_id == {}""".format(x, event_id)).fetchone()[0])
+    a[chat_id][who + '_bd']['immunity'] += int(
+        cur.execute("""Select immunity{} from events Where event_id == {}""".format(x, event_id)).fetchone()[0])
 
 
 def bd_family(chat_id, data):
@@ -53,16 +130,16 @@ def get_bunker_keyboard(chat_id):
     butts = []
     if a[chat_id]['dad']:
         butts.append(telebot.types.InlineKeyboardButton(text=f'Папа {a[chat_id]["dad_bd"]["emoji"]}',
-                                                  callback_data='bunker_family_dad'))
+                                                        callback_data='bunker_family_dad'))
     if a[chat_id]['mom']:
         butts.append(telebot.types.InlineKeyboardButton(text=f'Мама {a[chat_id]["mother_bd"]["emoji"]}',
-                                                  callback_data='bunker_family_mother'))
+                                                        callback_data='bunker_family_mother'))
     if a[chat_id]['brother']:
         butts.append(telebot.types.InlineKeyboardButton(text=f'Брат {a[chat_id]["brother_bd"]["emoji"]}',
-                                                  callback_data='bunker_family_brother'))
+                                                        callback_data='bunker_family_brother'))
     if a[chat_id]['brother']:
         butts.append(telebot.types.InlineKeyboardButton(text=f'Сестра {a[chat_id]["sister_bd"]["emoji"]}',
-                                                  callback_data='bunker_family_sister'))
+                                                        callback_data='bunker_family_sister'))
     bunker.add(*butts)
     bunker.add(telebot.types.InlineKeyboardButton(text='Журнал', callback_data='bunker_journal'),
                telebot.types.InlineKeyboardButton(text='Следующий день', callback_data='bunker_next_day'))
@@ -73,26 +150,19 @@ def get_bunker_keyboard(chat_id):
 
 def create_family_bd(chat_id):
     if cur.execute("""Select chat_id from dad where chat_id == {}""".format(chat_id)).fetchone():
-        cur.execute(
-            """UPDATE dad SET chat_id = ?, mood = ?, hungry = ?, water = ? immunity = ? emoji = ? WHERE chat_id == ?""",
-            (chat_id, a[chat_id]['dad_bd']['mood'], a[chat_id]['dad_bd']['hungry'], a[chat_id]['dad_bd']['water'],
-             a[chat_id]['dad_bd']['immunity'], a[chat_id]['dad_bd']['emoji'],
-             chat_id))
-        cur.execute(
-            """UPDATE mother SET chat_id = ?, mood = ?, hungry = ?, water = ? immunity = ? emoji = ? WHERE chat_id == ?""",
-            (chat_id, a[chat_id]['mother_bd']['mood'], a[chat_id]['mother_bd']['hungry'],
-             a[chat_id]['mother_bd']['immunity'], a[chat_id]['mother_bd']['emoji'],
-             a[chat_id]['mother_bd']['water']))
-        cur.execute(
-            """UPDATE brother SET chat_id = ?, mood = ?, hungry = ?, water = ? immunity = ? emoji = ? WHERE chat_id == ?""",
-            (chat_id, a[chat_id]['brother_bd']['mood'], a[chat_id]['brother_bd']['hungry'],
-             a[chat_id]['brother_bd']['immunity'], a[chat_id]['brother_bd']['emoji'],
-             a[chat_id]['brother_bd']['water']))
-        cur.execute(
-            """UPDATE sister SET chat_id = ?, mood = ?, hungry = ?, water = ? immunity = ? emoji = ? WHERE chat_id == ?""",
-            (chat_id, a[chat_id]['sister_bd']['mood'], a[chat_id]['sister_bd']['hungry'],
-             a[chat_id]['sister_bd']['immunity'], a[chat_id]['sister_bd']['emoji'],
-             a[chat_id]['sister_bd']['water']))
+        q = """UPDATE {} SET mood = {}, hungry = {}, immunity = {}, emoji = "{}", water = {} WHERE chat_id == {}"""
+        cur.execute(q.format('dad', a[chat_id]['dad_bd']['mood'], a[chat_id]['dad_bd']['hungry'],
+                             a[chat_id]['dad_bd']['immunity'], a[chat_id]['dad_bd']['emoji'],
+                             a[chat_id]['dad_bd']['water'], chat_id))
+        cur.execute(q.format('mother', a[chat_id]['mother_bd']['mood'], a[chat_id]['mother_bd']['hungry'],
+                             a[chat_id]['mother_bd']['immunity'], a[chat_id]['mother_bd']['emoji'],
+                             a[chat_id]['mother_bd']['water'], chat_id))
+        cur.execute(q.format('brother', a[chat_id]['brother_bd']['mood'], a[chat_id]['brother_bd']['hungry'],
+                             a[chat_id]['brother_bd']['immunity'], a[chat_id]['brother_bd']['emoji'],
+                             a[chat_id]['brother_bd']['water'], chat_id))
+        cur.execute(q.format('sister', a[chat_id]['sister_bd']['mood'], a[chat_id]['sister_bd']['hungry'],
+                             a[chat_id]['sister_bd']['immunity'], a[chat_id]['sister_bd']['emoji'],
+                             a[chat_id]['sister_bd']['water'], chat_id))
     else:
         cur.execute("""INSERT INTO dad VALUES (?, ?, ?, ?, ?, ?)""",
                     (chat_id, a[chat_id]['dad_bd']['mood'], a[chat_id]['dad_bd']['hungry'],
@@ -156,6 +226,33 @@ def bunker_logic(call):
                                   reply_markup=get_bunker_keyboard(call.from_user.id))
         except:
             pass
+    elif call.data == 'bunker_journal':
+        event_id = get_event_id()
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text=f'{get_event_name(event_id)}\n\n{get_event_text(event_id)}',
+                              reply_markup=get_event_keyboard(event_id))
+
+
+def get_event_id():
+    return choice(cur.execute("""Select event_id from events""").fetchall())[0]
+
+
+def get_event_text(event_id):
+    return cur.execute("""Select text from events where event_id == {}""".format(event_id)).fetchone()[0]
+
+
+def get_event_name(event_id):
+    return cur.execute("""Select name from events where event_id == {}""".format(event_id)).fetchone()[0]
+
+
+def get_event_keyboard(event_id):
+    keyboard = telebot.types.InlineKeyboardMarkup(row_width=10)
+    butts_text = cur.execute("""Select butts from events where event_id == {}""".format(event_id)).fetchone()[0].split(
+        ';')
+    butts = [telebot.types.InlineKeyboardButton(text=i,
+                                                callback_data=f'event_{event_id}_{i}') for i in butts_text]
+    keyboard.add(*butts)
+    return keyboard
 
 
 def save_update_to_bd(chat_id, inv=None):
@@ -168,6 +265,7 @@ def save_update_to_bd(chat_id, inv=None):
             """UPDATE saves SET chat_id = ?, inventory = ?, name = ?, mom = ?, dad = ?, brother = ?, sister = ?, day = ? WHERE chat_id == ?""",
             (chat_id, inventory, a[chat_id]['name'], a[chat_id]['mom'], a[chat_id]['dad'],
              a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], chat_id))
+        create_family_bd(chat_id)
     else:
         a[chat_id] = a[0]
         if inv:
@@ -196,17 +294,19 @@ def items():
 def time_(call, user):
     second = 60
     sms = bot.send_message(call.message.chat.id, 'У тебя осталось {} {} и {} места'.format(
-            second, morph('секунда')[0].make_agree_with_number(second).word, weight_list[user]), reply_markup=items())
+        second, morph('секунда')[0].make_agree_with_number(second).word, weight_list[user]), reply_markup=items())
     while second > 0:
         time.sleep(1)
         second -= 1
         bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id,
-            text='У тебя осталось {} {}  и {} места'.format(
-                second, morph('секунда')[0].make_agree_with_number(second).word, weight_list[user]), reply_markup=items())
+                              text='У тебя осталось {} {}  и {} места'.format(
+                                  second, morph('секунда')[0].make_agree_with_number(second).word, weight_list[user]),
+                              reply_markup=items())
         if weight_list[user] == 0 or second == 0:
             bot.send_message(call.message.chat.id, 'Вот что вы взяли с собой:\n' + '\n'.join(
                 '{}. {}'.format(i + 1, item) for i, item in enumerate(package.get(user, ['Пусто']))))
-            bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id, text='Время закончилось' if second == 0 else 'Место закончилось')
+            bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id,
+                                  text='Время закончилось' if second == 0 else 'Место закончилось')
             markup = types.ReplyKeyboardMarkup(True)
             markup.add(
                 types.InlineKeyboardButton('Донат'),
@@ -231,9 +331,9 @@ time_list = {}
 user_list = []
 weight_list = {}
 morph = pymorphy2.MorphAnalyzer().parse
-FOOD = {'vodka': ('водка', 1), 'mask': ('маска', 3), 'medicinechest': ('аптечка', 3), 'soap': ('мыло', 3), 'sausage': ('колбаса', 3)}
+FOOD = {'vodka': ('водка', 1), 'mask': ('маска', 3), 'medicinechest': ('аптечка', 3), 'soap': ('мыло', 3),
+        'sausage': ('колбаса', 3)}
 package = {}
-
 
 
 @bot.message_handler(commands=['start', 'new_game'])
@@ -283,7 +383,9 @@ def callback(call):
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton(text='Спрятаться', callback_data='play_start'),
                        types.InlineKeyboardButton(text='Сдаться', callback_data='play_end'))
-            bot.send_message(call.message.chat.id, 'Приготовься выживать в новом мире, которому грозит пандемия, вы решаетесь спрятаться в бункере, у тебя есть 60 секунд чтобы собрать все вещи до того как приедет полиция из-за подозрений на заражение', reply_markup=markup)
+            bot.send_message(call.message.chat.id,
+                             'Приготовься выживать в новом мире, которому грозит пандемия, вы решаетесь спрятаться в бункере, у тебя есть 60 секунд чтобы собрать все вещи до того как приедет полиция из-за подозрений на заражение',
+                             reply_markup=markup)
         elif type == 'no':
             murkup = types.InlineKeyboardMarkup(row_width=2)
             item_1 = types.InlineKeyboardButton('Да', callback_data='play_yes')
@@ -298,7 +400,8 @@ def callback(call):
             thread1.start()
             time_list[call.from_user.username] = thread1
         elif type == 'end':
-            bot.send_message(call.message.chat.id, 'Справедливо, но из-за этого вы уже реально заразились в общей больнице, а ведь могли рискнуть и выжить')
+            bot.send_message(call.message.chat.id,
+                             'Справедливо, но из-за этого вы уже реально заразились в общей больнице, а ведь могли рискнуть и выжить')
         elif type == 'continue':
             pass
     elif name_type == 'item':
@@ -309,7 +412,8 @@ def callback(call):
             else:
                 package[call.from_user.username] = package.get(call.from_user.username, []) + [FOOD[item][0]]
                 weight_list[user] -= FOOD[item][1]
-                bot.answer_callback_query(callback_query_id=call.id, text='Мы положили в сумку: {}'.format(morph(FOOD[item][0])[0].inflect({'accs'}).word))
+                bot.answer_callback_query(callback_query_id=call.id, text='Мы положили в сумку: {}'.format(
+                    morph(FOOD[item][0])[0].inflect({'accs'}).word))
 
 
 try:
@@ -317,4 +421,3 @@ try:
 except Exception as e:
     bot.polling()
     print(e)
-
