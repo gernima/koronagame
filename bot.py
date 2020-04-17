@@ -9,7 +9,6 @@ from event import events
 
 bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
 print('start')
-
 a = {0: {'inventory': {}, 'name': 'a', 'mother': 0, 'dad': 0, 'brother': 0, 'sister': 0, 'day': 1,
          'dad_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕'},
          'mother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌'},
@@ -459,16 +458,17 @@ def save_update_to_bd(chat_id):
              a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], chat_id))
         create_family_bd(chat_id)
     else:
-        if 'Папа' in family[chat_id]:
-            a[chat_id]['dad'] = 1
-        if 'Сестра' in family[chat_id]:
-            a[chat_id]['sister'] = 1
-        if 'Брат' in family[chat_id]:
-            a[chat_id]['brother'] = 1
-        if 'Мама' in family[chat_id]:
-            a[chat_id]['mother'] = 1
-        if family[chat_id]:
-            del family[chat_id]
+        if family:
+            if 'Папа' in family[chat_id]:
+                a[chat_id]['dad'] = 1
+            if 'Сестра' in family[chat_id]:
+                a[chat_id]['sister'] = 1
+            if 'Брат' in family[chat_id]:
+                a[chat_id]['brother'] = 1
+            if 'Мама' in family[chat_id]:
+                a[chat_id]['mother'] = 1
+            if family[chat_id]:
+                del family[chat_id]
         inventory = ';'.join([f'{x}:{a[chat_id]["inventory"][x]}' for x in a[chat_id]['inventory'].keys()])
         cur.execute("""INSERT INTO saves VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (chat_id, inventory, a[chat_id]['name'], a[chat_id]['mother'], a[chat_id]['dad'],
