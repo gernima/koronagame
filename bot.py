@@ -7,6 +7,8 @@ import sqlite3
 from random import choice, random
 from event import events
 
+
+
 bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
 print('start')
 
