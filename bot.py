@@ -6,24 +6,16 @@ import pymorphy2
 import sqlite3
 from random import choice, random
 from event import events
-
-
+from random import choice, sample
 
 bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
 print('start')
 
-
-return_family_menu = telebot.types.InlineKeyboardMarkup(row_width=1)
-return_family_menu.add(
-    telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
-    telebot.types.InlineKeyboardButton(text='Покормить', callback_data='bunker_family_feed')
-    )
 a = {0: {'inventory': [], 'name': 'a', 'mother': 1, 'dad': 1, 'brother': 1, 'sister': 1, 'day': 1,
-         'dad_bd': {'mood': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕'},
-         'mother_bd': {'mood': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌'},
-         'brother_bd': {'mood': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '🤨'},
-         'sister_bd': {'mood': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😔'}}}
-
+         'dad_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕'},
+         'mother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌'},
+         'brother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '🤨'},
+         'sister_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😔'}}}
 con = sqlite3.connect("bd.db", check_same_thread=False)
 cur = con.cursor()
 time_list = {}
@@ -42,6 +34,153 @@ FOOD = {'father': ('Папа', 'father', 15, 1),
         'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
         'water': ('вода', 'water', 2, 6, 50)}
 package = {}
+
+
+@bot.callback_query_handler(func=lambda call: 'bunker' in call.data and 'wasteland_return' not in call.data)
+def bunker_logic(call):
+    if call.data == 'bunker_family_dad':
+        edit_message_for_family(call)
+    elif call.data == 'bunker_family_mother':
+        edit_message_for_family(call)
+    elif call.data == 'bunker_family_sister':
+        edit_message_for_family(call)
+    elif call.data == 'bunker_family_brother':
+        edit_message_for_family(call)
+    elif call.data == 'bunker_wasteland':
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text='Люди в пустоши:',
+                              reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
+    elif call.data == 'bunker_inventory':
+        inv_items = "\n".join(a[call.from_user.id]["inventory"])
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text=f'Ваши вещи:\n {inv_items}',
+                              reply_markup=get_bunker_keyboard(call.from_user.id))
+    elif call.data == 'bunker_family_return':
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
+                              reply_markup=get_bunker_keyboard(call.from_user.id))
+    elif call.data == 'bunker_next_day':
+        # try:
+        add_wasteland_event(2, call.from_user.id)
+        a[call.from_user.id]['day'] += 1
+        save_update_to_bd(call.from_user.id)
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
+                              reply_markup=get_bunker_keyboard(call.from_user.id))
+        # except Exception as e:
+        #     print(call.data, '|', e)
+        elif call.data == 'bunker_family_feed':
+        name = call.message.text.split("\n")[0]
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
+                   types.InlineKeyboardButton(text=f'{1} x Консервы + 50 сытости',
+                                              callback_data=f'bunker_food_cannedfood_{name}'),
+                   types.InlineKeyboardButton(text=f'{1} x Вода + 50 вода', callback_data=f'bunker_food_water_{name}'))
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
+    elif 'food' in call.data:
+        name_ = call.data.split('_')[-1]
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
+                   types.InlineKeyboardButton(text=f'{1} x Консервы + 50 сытости',
+                                              callback_data=f'bunker_food_cannedfood_{name_}'),
+                   types.InlineKeyboardButton(text=f'{1} x Вода + 50 вода',
+                                              callback_data=f'bunker_food_water_{name_}'))
+        if 'Папа' in name_:
+            name = 'dad_bd'
+        elif 'Мама' in name_:
+            name = 'mother_bd'
+        elif 'Брат' in name_:
+            name = 'brother_bd'
+        elif 'Сестра' in name_:
+            name = 'sister_bd'
+        if 'cannedfood' in call.data:
+            if a[call.message.chat.id][name]['hungry'] <= 90:
+                a[call.message.chat.id][name]['hungry'] += 10
+            else:
+                return
+        else:
+            if a[call.message.chat.id][name]['water'] <= 90:
+                a[call.message.chat.id][name]['water'] += 10
+            else:
+                return
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f'{name_}'
+                                                                                                     f'\nНастроение: {a[call.from_user.id][name]["mood"]}'
+                                                                                                     f'\nСытость: {a[call.from_user.id][name]["hungry"]}'
+                                                                                                     f'\nЖажда: {a[call.from_user.id][name]["water"]}'
+                                                                                                     f'\nИммунитет: {a[call.from_user.id][name]["immunity"]}',
+                              reply_markup=markup)
+    elif call.data == 'bunker_journal':
+        chance = random()
+        if chance < .4:
+            event = choice(events['good'])
+        elif .5 > chance > .4:
+            event = choice(events['bad'])
+        else:
+            event = choice(events['choice'])
+        event_run(event, call.message)
+
+
+@bot.callback_query_handler(func=lambda call: 'wasteland' in call.data)
+def wasteland_logic(call):
+    if 'go' in call.data:
+        who = call.data.split('_')[1]
+        a[call.from_user.id][who] = 0
+        cur.execute("""INSERT INTO wasteland VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (call.from_user.id, who, 'День 1: Я в пустоши;', 1, False, 0, ''))
+        con.commit()
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
+                              reply_markup=get_bunker_keyboard(call.from_user.id))
+    else:
+        splited_data = call.data.split('_')
+        data = splited_data[2:]
+        chat_id = call.from_user.id
+        if call.data == 'wasteland_return':
+            bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                                  text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
+                                  reply_markup=get_bunker_keyboard(call.from_user.id))
+        elif 'wasteland_return_' in call.data:
+            splited_data = call.data.split('_')
+            if splited_data[2] == 'bunker':
+                day = cur.execute(
+                    """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id,
+                                                                                         splited_data[3])).fetchone()[0]
+                cur.execute("""UPDATE wasteland SET is_return=1, day_return=? where chat_id=? and who=?""",
+                            (day, chat_id, splited_data[3]))
+            else:
+                day = 0
+                cur.execute("""UPDATE wasteland SET is_return=0, day_return=? where chat_id=? and who=?""",
+                            (day, chat_id, splited_data[3]))
+            con.commit()
+            bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                                  text='Люди в пустоши:',
+                                  reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
+        elif 'family' in call.data:
+            who_data = splited_data[2]
+            who = ''
+            if who_data == 'dad':
+                who = 'Папа'
+            if who_data == 'mother':
+                who = 'Мама'
+            if who_data == 'sister':
+                who = 'Сестра'
+            if who_data == 'brother':
+                who = 'Брат'
+            q = f"""Select text from wasteland where chat_id = {chat_id} and who = '{who_data}'"""
+            logs = "\n".join(con.execute(q).fetchone()[0].split(';'))
+            q = f"""Select is_return from wasteland where chat_id = {chat_id} and who = '{who_data}'"""
+            x = ''
+            if con.execute(q).fetchone()[0]:
+                q = f"""Select day_return from wasteland where chat_id = {chat_id} and who = '{who_data}'"""
+                x = f'Дней до возвращания: {con.execute(q).fetchone()[0]}'
+            bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                                  text=f'{who} {a[chat_id][who_data + "_bd"]["emoji"]}'
+                                       f'\nЗдоровье: {a[call.from_user.id][who_data + "_bd"]["hp"]}'
+                                       f'\nСытость: {a[call.from_user.id][who_data + "_bd"]["hungry"]}'
+                                       f'\nЖажда: {a[call.from_user.id][who_data + "_bd"]["water"]}'
+                                       f'\nИммунитет: {a[call.from_user.id][who_data + "_bd"]["immunity"]}'
+                                       f'\n\n{logs}\n\n{x}',
+                                  reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
 
 
 def bd_family(chat_id, data):
@@ -89,8 +228,7 @@ def get_data_from_bd(chat_id):
         bd_family(chat_id, list(cur.execute(q.format('*', 'brother', chat_id)).fetchone()[1:]))
         bd_family(chat_id, list(cur.execute(q.format('*', 'sister', chat_id)).fetchone()[1:]))
 
-        a[chat_id]['inventory'] = str(
-            cur.execute(q.format('inventory', 'saves', chat_id)).fetchone()[0]).split(';')
+        a[chat_id]['inventory'] = str(cur.execute(q.format('inventory', 'saves', chat_id)).fetchone()[0]).split(';')
         a[chat_id]['name'] = cur.execute(q.format('name', 'saves', chat_id)).fetchone()[0]
         a[chat_id]['mother'] = cur.execute(q.format('mother', 'saves', chat_id)).fetchone()[0]
         a[chat_id]['dad'] = cur.execute(q.format('dad', 'saves', chat_id)).fetchone()[0]
@@ -102,72 +240,186 @@ def get_data_from_bd(chat_id):
 
 
 def get_bunker_keyboard(chat_id):
-    get_data_from_bd(chat_id)
     bunker = telebot.types.InlineKeyboardMarkup(row_width=5)
     butts = []
     if a[chat_id]['dad']:
         butts.append(telebot.types.InlineKeyboardButton(text=f'Папа {a[chat_id]["dad_bd"]["emoji"]}',
                                                         callback_data='bunker_family_dad'))
     if a[chat_id]['mother']:
-        butts.append(
-            telebot.types.InlineKeyboardButton(text=f'Мама {a[chat_id]["mother_bd"]["emoji"]}',
-                                               callback_data='bunker_family_mother'))
+        butts.append(telebot.types.InlineKeyboardButton(text=f'Мама {a[chat_id]["mother_bd"]["emoji"]}',
+                                                        callback_data='bunker_family_mother'))
     if a[chat_id]['brother']:
-        butts.append(
-            telebot.types.InlineKeyboardButton(text=f'Брат {a[chat_id]["brother_bd"]["emoji"]}',
-                                               callback_data='bunker_family_brother'))
-    if a[chat_id]['brother']:
-        butts.append(
-            telebot.types.InlineKeyboardButton(text=f'Сестра {a[chat_id]["sister_bd"]["emoji"]}',
-                                               callback_data='bunker_family_sister'))
+        butts.append(telebot.types.InlineKeyboardButton(text=f'Брат {a[chat_id]["brother_bd"]["emoji"]}',
+                                                        callback_data='bunker_family_brother'))
+    if a[chat_id]['sister']:
+        butts.append(telebot.types.InlineKeyboardButton(text=f'Сестра {a[chat_id]["sister_bd"]["emoji"]}',
+                                                        callback_data='bunker_family_sister'))
     bunker.add(*butts)
+    bunker.add(telebot.types.InlineKeyboardButton(text='Инвентарь', callback_data='bunker_inventory'))
     bunker.add(telebot.types.InlineKeyboardButton(text='Журнал', callback_data='bunker_journal'),
-               telebot.types.InlineKeyboardButton(text='Инвентарь', callback_data='bunker_inventory'))
-    bunker.add(
-        telebot.types.InlineKeyboardButton(text='Выход в пустошь', callback_data='bunker_wasteland'),
-        telebot.types.InlineKeyboardButton(text='Следующий день', callback_data='bunker_next_day'))
+               telebot.types.InlineKeyboardButton(text='Следующий день', callback_data='bunker_next_day'))
+    bunker.add(telebot.types.InlineKeyboardButton(text='Пустошь', callback_data='bunker_wasteland'))
 
     return bunker
 
 
+def get_wasteland_mans_keyboard(chat_id):
+    keyboard = telebot.types.InlineKeyboardMarkup(row_width=2)
+    q = f"""Select who from wasteland where chat_id = {chat_id}"""
+    who = con.execute(q).fetchall()
+    butts = []
+    keyboard.add(telebot.types.InlineKeyboardButton(text=f'Назад',
+                                                    callback_data='wasteland_return'))
+    for i in who:
+        i = i[0]
+        q = f"""Select is_return from wasteland where chat_id={chat_id} and who='{i}'"""
+        if i == 'dad':
+            butts.append(telebot.types.InlineKeyboardButton(text=f'Папа {a[chat_id][f"{i}_bd"]["emoji"]}',
+                                                            callback_data=f'wasteland_family_{i}'))
+            if cur.ecute(q).fetchone()[0]:
+                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
+                                                                callback_data=f'wasteland_return_wasteland_{i}'))
+            else:
+                butts.append(telexebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
+                                                                callback_data=f'wasteland_return_bunker_{i}'))
+        elif i == 'mother':
+            butts.append(telebot.types.InlineKeyboardButton(text=f'Мама {a[chat_id][f"{i}_bd"]["emoji"]}',
+                                                            callback_data=f'wasteland_family_{i}'))
+            if cur.execute(q).fetchone()[0]:
+                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
+                                                                callback_data=f'wasteland_return_wasteland_{i}'))
+            else:
+                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
+                                                                callback_data=f'wasteland_return_bunker_{i}'))
+        elif i == 'brother':
+            butts.append(telebot.types.InlineKeyboardButton(text=f'Брат {a[chat_id][f"{i}_bd"]["emoji"]}',
+                                                            callback_data=f'wasteland_family_{i}'))
+            if cur.execute(q).fetchone()[0]:
+                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
+                                                                callback_data=f'wasteland_return_wasteland_{i}'))
+            else:
+                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
+                                                                callback_data=f'wasteland_return_bunker_{i}'))
+        elif i == 'sister':
+            butts.append(telebot.types.InlineKeyboardButton(text=f'Сестра {a[chat_id][f"{i}_bd"]["emoji"]}',
+                                                            callback_data=f'wasteland_family_{i}'))
+            if cur.execute(q).fetchone()[0]:
+                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
+                                                                callback_data=f'wasteland_return_wasteland_{i}'))
+            else:
+                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
+                                                                callback_data=f'wasteland_return_bunker_{i}'))
+    keyboard.add(*butts)
+    return keyboard
+
+
+def add_wasteland_event(count, chat_id):
+    who_list = cur.execute("""Select who from wasteland where chat_id={}""".format(chat_id)).fetchall()
+    for who in who_list:
+        who = who[0]
+        event_list = [x[0] for x in cur.execute("""Select event_id from wasteland_events""").fetchall()]
+        event_list = sample(choice_event_id(event_list), k=count)
+        for event_id in event_list:
+            wasteland_event_system(chat_id, who, cur.execute(
+                """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[
+                0], event_id)
+        print(who, cur.execute(
+                        """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[
+                         0])
+        cur.execute("""UPDATE wasteland SET day=? where chat_id=? and who=?""",
+                    (cur.execute(
+                        """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[
+                         0] + 1, chat_id, who))
+        print(who, cur.execute(
+                        """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[
+                         0])
+        is_return = cur.execute(
+            """Select is_return from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[0]
+        if is_return:
+            day_return = \
+                cur.execute("""Select day_return from wasteland where chat_id={} and who='{}'""".format(chat_id,
+                                                                                                        who)).fetchone()[
+                    0]
+            if day_return > 0:
+                cur.execute("""UPDATE wasteland SET day_return=? where chat_id=? and who=?""",
+                            (day_return - 1, chat_id, who))
+            else:
+                a[chat_id][who] = 1
+                cur.execute("""Delete from wasteland where chat_id={} and who='{}'""".format(chat_id, who))
+    con.commit()
+
+
+def choice_event_id(event_list):
+    res = []
+    i = 0
+    q = """Select not_choiced from wasteland_events where event_id={}"""
+    n = len(event_list)
+    while i != n:
+        if len(event_list) != 0:
+            x = choice(event_list)
+            if cur.execute(q.format(x)).fetchone()[0] != 1:
+                res.append(x)
+                event_list.remove(x)
+                i += 1
+            else:
+                event_list.remove(x)
+        else:
+            break
+    return res
+
+
+def wasteland_event_system(chat_id, who, day, event_id):
+    text = f'{cur.execute("""Select text from wasteland where who="{}" and chat_id={}""".format(who, chat_id)).fetchone()[0]}День {day}: {cur.execute("""Select text from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]};'
+    cur.execute("""UPDATE wasteland SET text=?, day=? where chat_id=?""", (text, day, chat_id))
+    x = cur.execute("""Select hp, immunity from wasteland_events where event_id={}""".format(event_id)).fetchall()[0]
+    event_items = cur.execute("""Select items from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]
+    if x[0]:
+        a[chat_id][who + '_bd']['hp'] += int(x[0])
+    if x[1]:
+        a[chat_id][who + '_bd']['immunity'] += int(x[1])
+    who_items = \
+    cur.execute("""Select items from wasteland where who='{}' and chat_id={}""".format(who, chat_id)).fetchone()[0]
+    if who_items and event_items:
+        res_items = str(who_items + ';' + event_items)
+    else:
+        res_items = str(who_items + event_items)
+    cur.execute("""UPDATE wasteland SET items=? where chat_id=? and who=?""", (res_items, chat_id, who))
+    next_event_id = \
+    cur.execute("""Select next_event_id from wasteland_events where event_id={}""".format(event_id)).fetchall()[0]
+    if next_event_id[0]:
+        wasteland_event_system(chat_id, who, day, choice(next_event_id))
+
+
 def create_family_bd(chat_id):
     if cur.execute("""Select chat_id from dad where chat_id == {}""".format(chat_id)).fetchone():
-        cur.execute(
-            """UPDATE dad SET chat_id = ?, mood = ?, hungry = ?, water = ? immunity = ? emoji = ? WHERE chat_id == ?""",
-            (chat_id, a[chat_id]['dad_bd']['mood'], a[chat_id]['dad_bd']['hungry'],
-             a[chat_id]['dad_bd']['water'],
-             a[chat_id]['dad_bd']['immunity'], a[chat_id]['dad_bd']['emoji'],
-             chat_id))
-        cur.execute(
-            """UPDATE mother SET chat_id = ?, mood = ?, hungry = ?, water = ? immunity = ? emoji = ? WHERE chat_id == ?""",
-            (chat_id, a[chat_id]['mother_bd']['mood'], a[chat_id]['mother_bd']['hungry'],
-             a[chat_id]['mother_bd']['immunity'], a[chat_id]['mother_bd']['emoji'],
-             a[chat_id]['mother_bd']['water']))
-        cur.execute(
-            """UPDATE brother SET chat_id = ?, mood = ?, hungry = ?, water = ? immunity = ? emoji = ? WHERE chat_id == ?""",
-            (chat_id, a[chat_id]['brother_bd']['mood'], a[chat_id]['brother_bd']['hungry'],
-             a[chat_id]['brother_bd']['immunity'], a[chat_id]['brother_bd']['emoji'],
-             a[chat_id]['brother_bd']['water']))
-        cur.execute(
-            """UPDATE sister SET chat_id = ?, mood = ?, hungry = ?, water = ? immunity = ? emoji = ? WHERE chat_id == ?""",
-            (chat_id, a[chat_id]['sister_bd']['mood'], a[chat_id]['sister_bd']['hungry'],
-             a[chat_id]['sister_bd']['immunity'], a[chat_id]['sister_bd']['emoji'],
-             a[chat_id]['sister_bd']['water']))
+        q = """UPDATE {} SET hp = {}, hungry = {}, immunity = {}, emoji = "{}", water = {} WHERE chat_id == {}"""
+        cur.execute(q.format('dad', a[chat_id]['dad_bd']['hp'], a[chat_id]['dad_bd']['hungry'],
+                             a[chat_id]['dad_bd']['immunity'], a[chat_id]['dad_bd']['emoji'],
+                             a[chat_id]['dad_bd']['water'], chat_id))
+        cur.execute(q.format('mother', a[chat_id]['mother_bd']['hp'], a[chat_id]['mother_bd']['hungry'],
+                             a[chat_id]['mother_bd']['immunity'], a[chat_id]['mother_bd']['emoji'],
+                             a[chat_id]['mother_bd']['water'], chat_id))
+        cur.execute(q.format('brother', a[chat_id]['brother_bd']['hp'], a[chat_id]['brother_bd']['hungry'],
+                             a[chat_id]['brother_bd']['immunity'], a[chat_id]['brother_bd']['emoji'],
+                             a[chat_id]['brother_bd']['water'], chat_id))
+        cur.execute(q.format('sister', a[chat_id]['sister_bd']['hp'], a[chat_id]['sister_bd']['hungry'],
+                             a[chat_id]['sister_bd']['immunity'], a[chat_id]['sister_bd']['emoji'],
+                             a[chat_id]['sister_bd']['water'], chat_id))
     else:
         cur.execute("""INSERT INTO dad VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chat_id, a[chat_id]['dad_bd']['mood'], a[chat_id]['dad_bd']['hungry'],
+                    (chat_id, a[chat_id]['dad_bd']['hp'], a[chat_id]['dad_bd']['hungry'],
                      a[chat_id]['dad_bd']['water'], a[chat_id]['dad_bd']['immunity'],
                      a[chat_id]['dad_bd']['emoji']))
         cur.execute("""INSERT INTO mother VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chat_id, a[chat_id]['mother_bd']['mood'], a[chat_id]['mother_bd']['hungry'],
+                    (chat_id, a[chat_id]['mother_bd']['hp'], a[chat_id]['mother_bd']['hungry'],
                      a[chat_id]['mother_bd']['water'], a[chat_id]['mother_bd']['immunity'],
                      a[chat_id]['mother_bd']['emoji']))
         cur.execute("""INSERT INTO brother VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chat_id, a[chat_id]['brother_bd']['mood'], a[chat_id]['brother_bd']['hungry'],
+                    (chat_id, a[chat_id]['brother_bd']['hp'], a[chat_id]['brother_bd']['hungry'],
                      a[chat_id]['brother_bd']['water'], a[chat_id]['brother_bd']['immunity'],
                      a[chat_id]['brother_bd']['emoji']))
         cur.execute("""INSERT INTO sister VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chat_id, a[chat_id]['sister_bd']['mood'], a[chat_id]['sister_bd']['hungry'],
+                    (chat_id, a[chat_id]['sister_bd']['hp'], a[chat_id]['sister_bd']['hungry'],
                      a[chat_id]['sister_bd']['water'], a[chat_id]['sister_bd']['immunity'],
                      a[chat_id]['sister_bd']['emoji']))
     con.commit()
@@ -184,13 +436,17 @@ def edit_message_for_family(call):
         who = 'Сестра'
     elif call.data[len('bunker_family_'):] == 'brother':
         who = 'Брат'
+    family_menu = telebot.types.InlineKeyboardMarkup()
+    family_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
+    family_menu.add(telebot.types.InlineKeyboardButton(text='Отправить в пустошь',
+                                                       callback_data=f"wasteland_{call.data[len('bunker_family_'):]}_go"))
     bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                           text=f'{who} {a[call.from_user.id][who_bd]["emoji"]}'
-                               f'\nНастроение: {a[call.from_user.id][who_bd]["mood"]}'
+                               f'\nЗдоровье: {a[call.from_user.id][who_bd]["hp"]}'
                                f'\nСытость: {a[call.from_user.id][who_bd]["hungry"]}'
                                f'\nЖажда: {a[call.from_user.id][who_bd]["water"]}'
                                f'\nИммунитет: {a[call.from_user.id][who_bd]["immunity"]}',
-                          reply_markup=return_family_menu)
+                          reply_markup=family_menu)
 
 
 def save_update_to_bd(chat_id):
@@ -337,92 +593,6 @@ def send_text(message):
         bunker(message)
 
 
-@bot.callback_query_handler(func=lambda call: 'bunker' in call.data)
-def bunker_logic(call):
-    get_data_from_bd(call.from_user.id)
-    if call.data == 'bunker_family_dad':
-        edit_message_for_family(call)
-    elif call.data == 'bunker_family_mother':
-        edit_message_for_family(call)
-    elif call.data == 'bunker_family_sister':
-        edit_message_for_family(call)
-    elif call.data == 'bunker_family_brother':
-        edit_message_for_family(call)
-    elif call.data == 'bunker_family_return':
-        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
-                              text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
-                              reply_markup=get_bunker_keyboard(call.from_user.id))
-    elif call.data == 'bunker_next_day':
-        try:
-            a[call.from_user.id]['day'] += 1
-            save_update_to_bd(call.from_user.id)
-            bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
-                                  text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
-                                  reply_markup=get_bunker_keyboard(call.from_user.id))
-        except Exception as e:
-            pass
-    elif call.data == 'bunker_family_feed':
-        name = call.message.text.split("\n")[0]
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
-                   types.InlineKeyboardButton(text=f'{1} x Консервы + 50 сытости', callback_data=f'bunker_food_cannedfood_{name}'),
-                   types.InlineKeyboardButton(text=f'{1} x Вода + 50 вода', callback_data=f'bunker_food_water_{name}'))
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
-    elif 'food' in call.data:
-        name_ = call.data.split('_')[-1]
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
-                   types.InlineKeyboardButton(text=f'{1} x Консервы + 50 сытости',
-                                              callback_data=f'bunker_food_cannedfood_{name_}'),
-                   types.InlineKeyboardButton(text=f'{1} x Вода + 50 вода',
-                                              callback_data=f'bunker_food_water_{name_}'))
-        if 'Папа' in name_:
-            name = 'dad_bd'
-        elif 'Мама' in name_:
-            name = 'mother_bd'
-        elif 'Брат' in name_:
-            name = 'brother_bd'
-        elif 'Сестра' in name_:
-            name = 'sister_bd'
-        if 'cannedfood' in call.data:
-            if a[call.message.chat.id][name]['hungry'] <= 90:
-                a[call.message.chat.id][name]['hungry'] += 10
-            else:
-                return
-        else:
-            if a[call.message.chat.id][name]['water'] <= 90:
-                a[call.message.chat.id][name]['water'] += 10
-            else:
-                return
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f'{name_}'
-                                f'\nНастроение: {a[call.from_user.id][name]["mood"]}'
-                               f'\nСытость: {a[call.from_user.id][name]["hungry"]}'
-                               f'\nЖажда: {a[call.from_user.id][name]["water"]}'
-                               f'\nИммунитет: {a[call.from_user.id][name]["immunity"]}', reply_markup=markup)
-    elif call.data == 'bunker_journal':
-        chance = random()
-        if chance < .4:
-            event = choice(events['good'])
-        elif .5 > chance > .4:
-            event = choice(events['bad'])
-        else:
-            event = choice(events['choice'])
-        event_run(event, call.message)
-
-
-@bot.callback_query_handler(func=lambda call: 'event' in call.data)
-def event_logic(call):
-    event_type = call.data[6:]
-    bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
-    if event_type == 'canned_food_get':
-        bot.send_message(call.message.chat.id, 'вы взяли маски')
-    if event_type == 'canned_food_delete':
-        bot.send_message(call.message.chat.id, 'вы выбросили маски')
-    if event_type == 'canned_food_put_on':
-        bot.send_message(call.message.chat.id,
-                         'вы одели маски, они оказались чем то заразны у всей семьи падает иммунитет')
-
-
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
     global weight_list
@@ -489,7 +659,9 @@ def callback(call):
         weight_list[user] = 0
 
 
-try:
-    bot.polling()
-except Exception as e:
-    print('бот упал, молодца\n', e)
+while True:
+    try:
+        bot.polling()
+    except Exception as e:
+        bot.polling()
+        print('бот упал, молодца\n', e)

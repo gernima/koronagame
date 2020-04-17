@@ -1,2 +1,3 @@
-a = int(input(':'))
-print(-49 + 98)
+a = (None, )
+if a[0]:
+    print(1)
