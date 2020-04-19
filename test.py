@@ -1,3 +1,3 @@
-a = (None, )
-if a[0]:
-    print(1)
+while True:
+    a = int(input('   :'))
+    print(1 / 5 * a ** 5 - a ** 2)
