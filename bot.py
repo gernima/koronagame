@@ -260,7 +260,7 @@ def event_run(message):
             a[message.chat.id]['inventory']['cannedfood'] -= 1
             if a[message.chat.id]['inventory']['cannedfood'] == 0:
                 del a[message.chat.id]['inventory']['medicinechest']
-            bot.send_message(message.chat.id, 'Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
+            bot.edit_message_text(message.chat.id, 'Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
         else:
             event_run(message)
 
