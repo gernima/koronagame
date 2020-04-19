@@ -736,4 +736,3 @@ try:
 except Exception as e:
     bot.polling()
     print('бот упал, молодца\n', e)
-
