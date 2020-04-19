@@ -22,7 +22,7 @@ family = {}
 user_list = []
 weight_list = {}
 morph = pymorphy2.MorphAnalyzer().parse
-FOOD = {'father': ('Папа', 'father', 15, 1),
+FOOD = {'dad': ('Папа', 'dad', 15, 1),
         'sister': ('Сестра', 'sister',15, 1),
         'mother': ('Мама', 'mother', 15, 1),
         'brother': ('Брат', 'brother', 15, 1),
@@ -89,15 +89,9 @@ def bunker_logic(call):
         elif 'Сестра' in name_:
             name = 'sister_bd'
         if 'cannedfood' in call.data:
-            if a[call.message.chat.id][name]['hungry'] <= 90 and a[call.from_user.id]["inventory"].get("cannedfood", 0) > 0:
-                a[call.message.chat.id][name]['hungry'] += 10
-            else:
-                return
+            a[call.message.chat.id][name]['hungry'] += 10
         else:
-            if a[call.message.chat.id][name]['water'] <= 90 and a[call.from_user.id]["inventory"].get("water", 0) > 0:
-                a[call.message.chat.id][name]['water'] += 10
-            else:
-                return
+            a[call.message.chat.id][name]['water'] += 10
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                               text=f'{name_}'
                               f'\nНастроение: {a[call.from_user.id][name]["hp"]}'
@@ -542,9 +536,9 @@ def items(chat_id):
     markup = types.InlineKeyboardMarkup()
     item_1 = types.InlineKeyboardButton(text='', callback_data='item_')
     markup.add(types.InlineKeyboardButton(text='Бежииим!!!!!', callback_data='run'))
-    family_button = {'father': types.InlineKeyboardButton(
-        text=f'{items_how_many_things_are_left(chat_id, "father")} x Папа - 15',
-        callback_data='item_father'),
+    family_button = {'dad': types.InlineKeyboardButton(
+        text=f'{items_how_many_things_are_left(chat_id, "dad")} x Папа - 15',
+        callback_data='item_dad'),
         'mother': types.InlineKeyboardButton(
             text=f'{items_how_many_things_are_left(chat_id, "mother")} x Мама - 15',
             callback_data='item_mother'),
@@ -708,7 +702,7 @@ def callback(call):
                 bot.answer_callback_query(callback_query_id=call.id, text='Недостаточно места')
             else:
                 text = 'Мы положили в сумку: {}'
-                if item[1] in ['mother', 'father', 'brother', 'sister']:
+                if item[1] in ['mother', 'dad', 'brother', 'sister']:
                     if item_name not in family.get(chat_id, []):
                         text = 'Вы взяли с собой в бункер: {}'
                         family[chat_id] = family.get(chat_id, []) + [item_name]
