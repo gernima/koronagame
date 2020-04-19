@@ -207,10 +207,10 @@ def water_and_canned(call, name_):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
                types.InlineKeyboardButton(
-                   text=f'{a[call.from_user.id]["inventory"].get("cannedfood", 0)} x Консервы + 50 сытости',
+                   text=f'{a[call.from_user.id]["inventory"].get("cannedfood", 0)} x Консервы + 10 сытости',
                    callback_data=f'bunker_food_cannedfood_{name_}'),
                types.InlineKeyboardButton(
-                   text=f'{a[call.from_user.id]["inventory"].get("water", 0)} x Вода + 50 вода',
+                   text=f'{a[call.from_user.id]["inventory"].get("water", 0)} x Вода + 10 вода',
                    callback_data=f'bunker_food_water_{name_}'))
     return markup
 
