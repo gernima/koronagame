@@ -459,7 +459,7 @@ def wasteland_event_system(chat_id, who, day, event_id):
             if type(next_event_id) is type(int()):
                 wasteland_event_system(chat_id, who, day, next_event_id)
             else:
-                wasteland_event_system(chat_id, who, day, choice(next_event_id))
+                wasteland_event_system(chat_id, who, day, choice(next_event_id.split(';')))
 
 
 def wasteland_event_items(event_id, res_items, tf=True):
@@ -507,8 +507,11 @@ def next_event_items(res_items, event_id, tf):
                 if type(next_event_id) is type(int()):
                     res_items, tf = next_event_items(res_items, next_event_id, tf)
                 else:
-                    for next_event_i in next_event_id.split(';'):
+                    next_event_id = next_event_id.split(';')
+                    for next_event_i in next_event_id:
                         res_items, tf = next_event_items(res_items, next_event_i, tf)
+                        if tf is False:
+                            break
     return res_items, tf
 
 
