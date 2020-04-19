@@ -128,6 +128,9 @@ def event_logic(call):
                 text='Не надо было оставлять эту проблему, все члены семьи получили психическое '
                 'растройство, а так же их покусали пауки, падение иммунитета у всей семьи', reply_markup=markup)
         elif button == 'medicinechest':
+            a[call.message.chat.id]['inventory']['medicinechest'] -= 1
+            if a[call.message.chat.id]['inventory']['medicinechest'] == 0:
+                del a[call.message.chat.id]['inventory']['medicinechest']
             a[chat_id][people + '_bd']['immunity'] = max(people_immunity + 10, 100)
             people = morph(FOOD[people][0])[0].inflect({"gent"}).word
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Пауки были вымешленные, вы приняли таблетки и все'
@@ -242,9 +245,6 @@ def event_run(message):
                              'супе. Они в нашей воде. Мы клянемся, что некоторые из них продолжают возвращаться, и они'
                              ' становятся больше с каждым разом, когда мы их видим! Так продолжаться не может. Пришло '
                              'время вести войну с этими пауками!', reply_markup=markup)
-            a[message.chat.id]['inventory']['medicinechest'] -= 1
-            if a[message.chat.id]['inventory']['medicinechest'] == 0:
-                del a[message.chat.id]['inventory']['medicinechest']
         else:
             event_run(message)
     elif event == 'доставка от правительства':
@@ -260,7 +260,7 @@ def event_run(message):
             a[message.chat.id]['inventory']['cannedfood'] -= 1
             if a[message.chat.id]['inventory']['cannedfood'] == 0:
                 del a[message.chat.id]['inventory']['cannedfood']
-            bot.edit_message_text(message.chat.id, 'Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
+            bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text='Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
         else:
             event_run(message)
 
