@@ -7,8 +7,9 @@ import sqlite3
 from random import choice, random, sample
 from event import events
 
-bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
+bot = telebot.TeleBot('1049041175:AAFHw6FXE2-yCv7L4sJmwg50eImuAusJOG0')
 print('start')
+
 a = {0: {'inventory': {}, 'name': 'a', 'mother': 0, 'dad': 0, 'brother': 0, 'sister': 0, 'day': 1,
          'dad_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕'},
          'mother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌'},
@@ -227,7 +228,7 @@ def get_data_from_bd(chat_id):
         bd_family(chat_id, list(cur.execute(q.format('*', 'sister', chat_id)).fetchone()[1:]))
         inv = {}
         b = cur.execute(q.format('inventory', 'saves', chat_id)).fetchone()[0].split(';')
-        if len(b) > 0 and b[0] != '':
+        if len(b) > 0 and b[0].strip() != '':
             for i in [x.split(':') for x in b]:
                 inv[i[0]] = i[1]
             a[chat_id]['inventory'] = inv
@@ -346,10 +347,10 @@ def add_wasteland_event(count, chat_id):
                 if len(b) != 0:
                     for i in [x.split(':') for x in b]:
                         if i[0] in a[chat_id]['inventory'].keys():
-                            n = i[1] + a[chat_id]['inventory'][i[0]]
-                            a[chat_id]['inventory'][i[0]] = n
+                            n = int(i[1]) + int(a[chat_id]['inventory'][i[0]])
+                            a[chat_id]['inventory'][i[0]] = int(n)
                         else:
-                            a[chat_id]['inventory'][i[0]] = i[1]
+                            a[chat_id]['inventory'][i[0]] = int(i[1])
                 cur.execute("""Delete from wasteland where chat_id={} and who='{}'""".format(chat_id, who))
     con.commit()
 
@@ -374,19 +375,89 @@ def choice_event_id(event_list):
 
 
 def wasteland_event_system(chat_id, who, day, event_id):
-    text = f'{cur.execute("""Select text from wasteland where who="{}" and chat_id={}""".format(who, chat_id)).fetchone()[0]}День {day}: {cur.execute("""Select text from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]};'
-    cur.execute("""UPDATE wasteland SET text=?, day=? where chat_id=?""", (text, day, chat_id))
-    x = cur.execute("""Select hp, immunity from wasteland_events where event_id={}""".format(event_id)).fetchall()[0]
-    if x[0]:
-        a[chat_id][who + '_bd']['hp'] += int(x[0])
-    if x[1]:
-        a[chat_id][who + '_bd']['immunity'] += int(x[1])
-    b = cur.execute("""Select items from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]
-    cur.execute("""UPDATE wasteland SET items=? where chat_id=? and who=?""", (b, chat_id, who))
+    who_items = cur.execute("""Select items from wasteland where chat_id={}""".format(chat_id)).fetchone()[0].split(';')
+    res_items = {}
+    if len(who_items) > 0 and who_items[0].strip() != '':
+        for i in [x.split(':') for x in who_items]:
+            res_items[i[0]] = int(i[1])
+    tf = True
+    if res_items:
+        wasteland_event_items(event_id, res_items)
     next_event_id = \
-    cur.execute("""Select next_event_id from wasteland_events where event_id={}""".format(event_id)).fetchall()[0]
-    if next_event_id[0]:
-        wasteland_event_system(chat_id, who, day, choice(next_event_id))
+        cur.execute("""Select next_event_id from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]
+    if next_event_id and tf:
+        if type(next_event_id) is type(int()):
+            res_items, tf = next_event_items(res_items, next_event_id, tf)
+        else:
+            for next_event_i in next_event_id.split(';'):
+                res_items, tf = next_event_items(res_items, next_event_i, tf)
+                if tf is False:
+                    break
+    if tf:
+        text = f'{cur.execute("""Select text from wasteland where who="{}" and chat_id={}""".format(who, chat_id)).fetchone()[0]}День {day}: {cur.execute("""Select text from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]};'
+        cur.execute("""UPDATE wasteland SET text=?, day=? where chat_id=?""", (text, day, chat_id))
+        x = cur.execute("""Select hp, immunity from wasteland_events where event_id={}""".format(event_id)).fetchall()[0]
+        if x[0]:
+            a[chat_id][who + '_bd']['hp'] += int(x[0])
+        if x[1]:
+            a[chat_id][who + '_bd']['immunity'] += int(x[1])
+        res_items = ';'.join([f'{x}:{res_items[x]}' for x in res_items.keys()])
+        cur.execute("""UPDATE wasteland SET items=? where chat_id=? and who=?""", (res_items, chat_id, who))
+        if next_event_id:
+            if type(next_event_id) is type(int()):
+                wasteland_event_system(chat_id, who, day, next_event_id)
+            else:
+                wasteland_event_system(chat_id, who, day, choice(next_event_id))
+
+
+def wasteland_event_items(event_id, res_items, tf=True):
+    first_items = res_items
+    items_plus = \
+        cur.execute("""Select items_plus from wasteland_events where event_id={}""".format(event_id)).fetchone()[
+            0]
+    if items_plus and items_plus[0].strip() != '':
+        items_plus = items_plus.split(';')
+        if len(items_plus) > 0 and items_plus[0].strip() != '':
+            for i in [x.split(':') for x in items_plus]:
+                if i[0] in res_items.keys():
+                    res_items[i[0]] = int(res_items[i[0]]) + int(i[1])
+                else:
+                    res_items[i[0]] = int(i[1])
+    items_minus = \
+        cur.execute("""Select items_minus from wasteland_events where event_id={}""".format(event_id)).fetchone()[
+            0]
+    if items_minus and items_minus[0].strip() != '':
+        items_minus = items_minus.split(';')
+        if len(items_minus) > 0 and items_minus[0].strip() != '':
+            for i in [x.split(':') for x in items_minus]:
+                if i[0] in res_items.keys():
+                    if res_items[i[0]] - int(i[1]) > 0:
+                        res_items[i[0]] = int(res_items[i[0]]) - int(i[1])
+                    elif res_items[i[0]] - int(i[1]) == 0:
+                        del res_items[i[0]]
+                    else:
+                        tf = False
+                        break
+    if tf:
+        return res_items, tf
+    else:
+        return first_items, tf
+
+
+def next_event_items(res_items, event_id, tf):
+    if tf:
+        res_items, tf = wasteland_event_items(event_id, res_items, tf)
+        if tf:
+            next_event_id = \
+                cur.execute("""Select next_event_id from wasteland_events where event_id={}""".format(event_id)).fetchone()[
+                    0]
+            if next_event_id and str(next_event_id).strip() != '':
+                if type(next_event_id) is type(int()):
+                    res_items, tf = next_event_items(res_items, next_event_id, tf)
+                else:
+                    for next_event_i in next_event_id.split(';'):
+                        res_items, tf = next_event_items(res_items, next_event_i, tf)
+    return res_items, tf
 
 
 def create_family_bd(chat_id):
@@ -458,7 +529,7 @@ def save_update_to_bd(chat_id):
              a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], chat_id))
         create_family_bd(chat_id)
     else:
-        if family:
+        if family[chat_id]:
             if 'Папа' in family[chat_id]:
                 a[chat_id]['dad'] = 1
             if 'Сестра' in family[chat_id]:
@@ -671,9 +742,8 @@ def callback(call):
         weight_list[user] = 0
 
 
-while True:
-    try:
-        bot.polling()
-    except Exception as e:
-        bot.polling()
-        print('бот упал, молодца\n', e)
+try:
+    bot.polling()
+except Exception as e:
+    bot.polling()
+    print('бот упал, молодца\n', e)
