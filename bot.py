@@ -23,12 +23,12 @@ user_list = []
 weight_list = {}
 morph = pymorphy2.MorphAnalyzer().parse
 FOOD = {'father': ('Папа', 'father', 15, 1),
-        'daughter': ('Сестра', 'daughter',15, 1),
+        'sister': ('Сестра', 'sister',15, 1),
         'mother': ('Мама', 'mother', 15, 1),
-        'son': ('Брат', 'son', 15, 1),
+        'brother': ('Брат', 'brother', 15, 1),
         'mask': ('маска', 'mask', 3, 1),
         'medicinechest': ('аптечка', 'medicinechest', 3, 1),
-        'soap': ('мыло', 'soap', 3, 1),
+        'soap': ('мыло', 'soap', 3, 4),
         'obrez': ('обрез', 'obrez', 50, 1, 1),
         'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
         'water': ('вода', 'water', 2, 6, 50)}
@@ -50,16 +50,22 @@ def bunker_logic(call):
                               text='Люди в пустоши:',
                               reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
     elif call.data == 'bunker_inventory':
-        inv_items = "\n".join([f"{FOOD[x][0]}: {a[call.from_user.id]['inventory'][x]}" for x in a[call.from_user.id]["inventory"].keys()])
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
+        inv_items = "\n".join([f"{FOOD[x][0]}: {a[call.from_user.id]['inventory'][x]}" for x in
+                               a[call.from_user.id]["inventory"].keys()])
+        if not a[call.from_user.id]["inventory"].keys():
+            inv_items = 'Пусто'
         bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                               text=f'Ваши вещи:\n{inv_items}',
-                              reply_markup=get_bunker_keyboard(call.from_user.id))
+                              reply_markup=markup)
     elif call.data == 'bunker_family_return':
         bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                               text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
                               reply_markup=get_bunker_keyboard(call.from_user.id))
     elif call.data == 'bunker_next_day':
         # try:
+        # add_wasteland_event
         add_wasteland_event(2, call.from_user.id)
         a[call.from_user.id]['day'] += 1
         save_update_to_bd(call.from_user.id)
@@ -70,21 +76,10 @@ def bunker_logic(call):
         #     print(call.data, '|', e)
     elif call.data == 'bunker_family_feed':
         name = call.message.text.split("\n")[0]
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
-                   types.InlineKeyboardButton(text=f'{1} x Консервы + 50 сытости',
-                                              callback_data=f'bunker_food_cannedfood_{name}'),
-                   types.InlineKeyboardButton(text=f'{1} x Вода + 50 вода', callback_data=f'bunker_food_water_{name}'))
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=water_and_canned(call, name))
     elif 'food' in call.data:
         name_ = call.data.split('_')[-1]
         name = ''
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
-                   types.InlineKeyboardButton(text=f'{1} x Консервы + 50 сытости',
-                                              callback_data=f'bunker_food_cannedfood_{name_}'),
-                   types.InlineKeyboardButton(text=f'{1} x Вода + 50 вода',
-                                              callback_data=f'bunker_food_water_{name_}'))
         if 'Папа' in name_:
             name = 'dad_bd'
         elif 'Мама' in name_:
@@ -94,31 +89,52 @@ def bunker_logic(call):
         elif 'Сестра' in name_:
             name = 'sister_bd'
         if 'cannedfood' in call.data:
-            if a[call.message.chat.id][name]['hungry'] <= 90:
+            if a[call.message.chat.id][name]['hungry'] <= 90 and a[call.from_user.id]["inventory"].get("cannedfood", 0) > 0:
                 a[call.message.chat.id][name]['hungry'] += 10
             else:
                 return
         else:
-            if a[call.message.chat.id][name]['water'] <= 90:
+            if a[call.message.chat.id][name]['water'] <= 90 and a[call.from_user.id]["inventory"].get("water", 0) > 0:
                 a[call.message.chat.id][name]['water'] += 10
             else:
                 return
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
                               text=f'{name_}'
-                              f'\nНастроение: {a[call.from_user.id][name]["mood"]}'
+                              f'\nНастроение: {a[call.from_user.id][name]["hp"]}'
                               f'\nСытость: {a[call.from_user.id][name]["hungry"]}'
                               f'\nЖажда: {a[call.from_user.id][name]["water"]}'
                               f'\nИммунитет: {a[call.from_user.id][name]["immunity"]}',
-                              reply_markup=markup)
+                              reply_markup=water_and_canned(call, name_))
     elif call.data == 'bunker_journal':
-        chance = random()
-        if chance < .4:
-            event = choice(events['good'])
-        elif .5 > chance > .4:
-            event = choice(events['bad'])
-        else:
-            event = choice(events['choice'])
-        event_run(event, call.message)
+        event_run(call.message)
+
+
+@bot.callback_query_handler(func=lambda call: 'event' in call.data)
+def event_logic(call):
+    text = call.data.split('_')
+    event, button = text[1], ''.join(text[2:])
+    print(button)
+    chat_id = call.message.chat.id
+    family = [i for i in ['mother', 'dad', 'brother', 'sister'] if a[chat_id][i] != 0]
+    if event == 'spider':
+        people = choice(family)
+        people_immunity = a[chat_id][people + '_bd']['immunity']
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
+        if button == 'continue':
+            for i in family:
+                a[chat_id][i + '_bd']['immunity'] = min(a[chat_id][i + '_bd']['immunity'] - 20, 0)
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                text='Не надо было оставлять эту проблему, все члены семьи получили психическое '
+                'растройство, а так же их покусали пауки, падение иммунитета у всей семьи', reply_markup=markup)
+        elif button == 'medicinechest':
+            a[chat_id][people + '_bd']['immunity'] = max(people_immunity + 10, 100)
+            people = morph(FOOD[people][0])[0].inflect({"gent"}).word
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Пауки были вымешленные, вы приняли таблетки и все'
+                                                   f' прошло, а у {people} прошла старая болезнь', reply_markup=markup)
+        elif button == 'war':
+            a[chat_id][people + '_bd']['immunity'] = min(people_immunity - 5, 0)
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f'Вы отбились от пауков, но один из них укусил {FOOD[people][0]}', reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda call: 'wasteland' in call.data)
@@ -184,6 +200,18 @@ def wasteland_logic(call):
                                   reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
 
 
+def water_and_canned(call, name_):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
+               types.InlineKeyboardButton(
+                   text=f'{a[call.from_user.id]["inventory"].get("cannedfood", 0)} x Консервы + 50 сытости',
+                   callback_data=f'bunker_food_cannedfood_{name_}'),
+               types.InlineKeyboardButton(
+                   text=f'{a[call.from_user.id]["inventory"].get("water", 0)} x Вода + 50 вода',
+                   callback_data=f'bunker_food_water_{name_}'))
+    return markup
+
+
 def bd_family(chat_id, data):
     x = 0
     for i in a[chat_id]['dad_bd'].keys():
@@ -191,24 +219,50 @@ def bd_family(chat_id, data):
         x += 1
 
 
-def event_run(event, message):
+def event_run(message):
+    chance = random()
+    event = ''
+    if chance < .3:
+        event = choice(events['good'])
+    elif .6> chance > .3:
+        event = choice(events['bad'])
+    else:
+        event = choice(events['choice'])
+    markup = types.InlineKeyboardMarkup()
+    package = set(list(a[message.chat.id]['inventory']))
     if event == 'пауки в бункере':
-        bot.send_message(message.chat.id,
-                         'Это безумие! Мы постоянно находим пауков. Они в нашем '
-                         'супе. Они в нашей воде. Мы клянемся, что некоторые из них продолжают возвращаться, и они'
-                         ' становятся больше с каждым разом, когда мы их видим! Так продолжаться не может. Пришло '
-                         'время вести войну с этими пауками!')
-
-    elif event == 'мама начала чихать':
-        bot.send_message(message.chat.id, 'мама кашляет')  # мама теряет иммунитет
-    elif event == 'нашли консервы':
-        markup = types.InlineKeyboardMarkup()
-        markup.add(
-            types.InlineKeyboardButton(text='Взять', callback_data='event_canned_food_get'),
-            types.InlineKeyboardButton(text='Выбросить', callback_data='event_canned_food_delete'),
-            types.InlineKeyboardButton(text='Надеть всем', callback_data='event_canned_food_put_on')
-        )
-        bot.send_message(message.chat.id, 'Вы нашли консервы', reply_markup=markup)
+        if 'medicinechest' in package:
+            markup.add(
+                types.InlineKeyboardButton(text='аптечка', callback_data='event_spider_medicinechest'),
+                types.InlineKeyboardButton(text='война с пауками', callback_data='event_spider_war')
+                    )
+            markup.add(types.InlineKeyboardButton(text='не обращать внимания', callback_data='event_spider_continue'))
+            bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id,
+                             text='Это безумие! Мы постоянно находим пауков. Они в нашем '
+                             'супе. Они в нашей воде. Мы клянемся, что некоторые из них продолжают возвращаться, и они'
+                             ' становятся больше с каждым разом, когда мы их видим! Так продолжаться не может. Пришло '
+                             'время вести войну с этими пауками!', reply_markup=markup)
+            a[message.chat.id]['inventory']['medicinechest'] -= 1
+            if a[message.chat.id]['inventory']['medicinechest'] == 0:
+                del a[message.chat.id]['inventory']['medicinechest']
+        else:
+            event_run(message)
+    elif event == 'доставка от правительства':
+        markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
+        item = choice(['water', 'medicinechest', 'cannedfood'])
+        a[message.chat.id]['inventory'][item] = a[message.chat.id
+                                                ]['inventory'].get(item, 0) + 1
+        bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text=f'Вы получаете помощь от правительства: {FOOD[item][0]}', reply_markup=markup)
+    elif event == 'консервы просрочены':
+        if 'cannedfood' in package:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
+            a[message.chat.id]['inventory']['cannedfood'] -= 1
+            if a[message.chat.id]['inventory']['cannedfood'] == 0:
+                del a[message.chat.id]['inventory']['medicinechest']
+            bot.send_message(message.chat.id, 'Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
+        else:
+            event_run(message)
 
 
 def bunker(message):
@@ -440,6 +494,7 @@ def edit_message_for_family(call):
     family_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
     family_menu.add(telebot.types.InlineKeyboardButton(text='Отправить в пустошь',
                                                        callback_data=f"wasteland_{call.data[len('bunker_family_'):]}_go"))
+    family_menu.add(telebot.types.InlineKeyboardButton(text='Кормить', callback_data='bunker_family_feed'))
     bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                           text=f'{who} {a[call.from_user.id][who_bd]["emoji"]}'
                                f'\nЗдоровье: {a[call.from_user.id][who_bd]["hp"]}'
@@ -459,7 +514,8 @@ def save_update_to_bd(chat_id):
              a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], chat_id))
         create_family_bd(chat_id)
     else:
-        if family:
+        print(family)
+        if family.get(chat_id, False):
             if 'Папа' in family[chat_id]:
                 a[chat_id]['dad'] = 1
             if 'Сестра' in family[chat_id]:
@@ -478,33 +534,33 @@ def save_update_to_bd(chat_id):
     con.commit()
 
 
-def items_how_many_things_are_left(user, item):
-    return FOOD[item][3] - package.get(user, {}).get(FOOD[item][1], 0)
+def items_how_many_things_are_left(chat_id, item):
+    return FOOD[item][3] - package.get(chat_id, {}).get(FOOD[item][1], 0)
 
 
-def items(user):
+def items(chat_id):
     markup = types.InlineKeyboardMarkup()
     item_1 = types.InlineKeyboardButton(text='', callback_data='item_')
     markup.add(types.InlineKeyboardButton(text='Бежииим!!!!!', callback_data='run'))
     family_button = {'father': types.InlineKeyboardButton(
-        text=f'{items_how_many_things_are_left(user, "father")} x Папа - 15',
+        text=f'{items_how_many_things_are_left(chat_id, "father")} x Папа - 15',
         callback_data='item_father'),
         'mother': types.InlineKeyboardButton(
-            text=f'{items_how_many_things_are_left(user, "mother")} x Мама - 15',
+            text=f'{items_how_many_things_are_left(chat_id, "mother")} x Мама - 15',
             callback_data='item_mother'),
-        'son': types.InlineKeyboardButton(
-            text=f'{items_how_many_things_are_left(user, "son")} x Сын - 15',
-            callback_data='item_son'),
-        'daughter': types.InlineKeyboardButton
-        (text=f'{items_how_many_things_are_left(user, "daughter")} x Дочь - 15',
-         callback_data='item_daughter'), }
+        'brother': types.InlineKeyboardButton(
+            text=f'{items_how_many_things_are_left(chat_id, "brother")} x Сын - 15',
+            callback_data='item_brother'),
+        'sister': types.InlineKeyboardButton
+        (text=f'{items_how_many_things_are_left(chat_id, "sister")} x Дочь - 15',
+         callback_data='item_sister'), }
     item_button = [types.InlineKeyboardButton(
-            text=f'{items_how_many_things_are_left(user, key)} x {value[0]} - {value[2]}',
+            text=f'{items_how_many_things_are_left(chat_id, key)} x {value[0]} - {value[2]}',
             callback_data=f'item_{key}')
-        for key, value in FOOD.items() if package.get(user, {}).get(value[1], 0) != value[3]
+        for key, value in FOOD.items() if package.get(chat_id, {}).get(value[1], 0) != value[3]
                                           and value[1] not in family_button.keys()]
     button = [family_button[i] for i in
-              filter(lambda x: FOOD[x][0] not in family.get(user, []), family_button)] + \
+              filter(lambda x: FOOD[x][0] not in family.get(chat_id, []), family_button)] + \
              item_button
     for i in range(0, len(button), 2):
         markup.add(*button[i:i + 2])
@@ -524,30 +580,30 @@ def car(message):
                           text='🚗________________')
 
 
-def time_cheker(call, user):
+def time_cheker(call, chat_id):
     second = 60
     sms = bot.send_message(call.message.chat.id, 'У тебя осталось {} {} и {} места в бункере'.format(
-        second, morph('секунда')[0].make_agree_with_number(second).word, weight_list[user]),
-                           reply_markup=items(user))
+        second, morph('секунда')[0].make_agree_with_number(second).word, weight_list[chat_id]),
+                           reply_markup=items(chat_id))
     while second > 0:
         time.sleep(1)
         second -= 1
         bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id,
-                              text='У тебя осталось {} {}  и {} места в бункере'.format(
+                              text='У тебя осталось {} {}  и {} места в бункере\nНе забудь взять минимум 1 члена семьи'.format(
                                   second, morph('секунда')[0].make_agree_with_number(second).word,
-                                  weight_list[user]), reply_markup=items(user))
-        if weight_list[user] < 1 or second == 0:
-            if package.get(user, False):
+                                  weight_list[chat_id]), reply_markup=items(chat_id))
+        if weight_list[chat_id] < 1 or second == 0:
+            if package.get(chat_id, False):
                 bot.send_message(call.message.chat.id, 'Вот что вы взяли с собой:\n' +
                                  '\n'.join(
                                      '{}. {} x {}'.format(i + 1, FOOD[item[0]][0], item[1]) for i, item in
-                                     enumerate(package[user].items())))
+                                     enumerate(package[chat_id].items())))
             else:
                 bot.send_message(call.message.chat.id,
                                  'Вы ничего с собой не взяли, да ты хардкорный чел')
             bot.send_message(call.message.chat.id, 'Из семьи вы взяли:\n' + '\n'.join(
                 '{}. {}'.format(i + 1, item) for i, item in
-                enumerate(family.get(user, ['Никого, но как же так?)']))))
+                enumerate(family.get(chat_id, ['Никого, но как же так?)']))))
             bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id,
                                   text='Время закончилось' if second == 0 else 'Место закончилось')
             markup = types.ReplyKeyboardMarkup(True)
@@ -560,11 +616,11 @@ def time_cheker(call, user):
 
             a[call.from_user.id] = a[0]
             if len(package.keys()) != 0:
-                a[call.from_user.id]['inventory'] = package[user]
+                a[call.from_user.id]['inventory'] = package[chat_id]
             save_update_to_bd(call.from_user.id)
             for i in (package, weight_list):
-                if user in i:
-                    del i[user]
+                if chat_id in i:
+                    del i[chat_id]
             car(call.message)
             bunker(call.message)
             return
@@ -609,7 +665,7 @@ def send_text(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
     global weight_list
-    user = call.from_user.id
+    chat_id = call.message.chat.id
     name = call.data
     name_type = name.split('_')[0]
     if name_type == 'play':
@@ -617,8 +673,7 @@ def callback(call):
         bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
         if type == 'yes':
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton(text='Спрятаться', callback_data='play_start'),
-                       types.InlineKeyboardButton(text='Сдаться', callback_data='play_end'))
+            markup.add(types.InlineKeyboardButton(text='Спрятаться', callback_data='play_start'))
             bot.send_message(call.message.chat.id,
                              'Приготовься выживать в новом мире, которому грозит пандемия, вы решаетесь спрятаться в бункере, у тебя есть 60 секунд чтобы собрать все вещи до того как приедет полиция из-за подозрений на заражение',
                              reply_markup=markup)
@@ -630,51 +685,54 @@ def callback(call):
             bot.send_message(call.message.chat.id, 'Сыканул, может все таки сыграешь?',
                              reply_markup=murkup)
         elif type == 'start':
-            print('Счетчик: ' + call.from_user.username)
-            weight_list[user] = 50
-            thread1 = Thread(target=time_cheker, args=(call, user))
-            thread1.start()
-            time_list[user] = thread1
-        elif type == 'end':
-            bot.send_message(call.message.chat.id,
-                             'Справедливо, но из-за этого вы уже реально заразились в общей больнице, а ведь могли рискнуть и выжить')
+            if chat_id not in weight_list:
+                cur.execute("""Delete from wasteland where chat_id={}""".format(chat_id))
+                cur.execute("""Delete from brother where chat_id={}""".format(chat_id))
+                cur.execute("""Delete from dad where chat_id={}""".format(chat_id))
+                cur.execute("""Delete from mother where chat_id={}""".format(chat_id))
+                cur.execute("""Delete from saves where chat_id={}""".format(chat_id))
+                cur.execute("""Delete from sister where chat_id={}""".format(chat_id))
+                print('Счетчик: ' + call.from_user.username)
+                weight_list[chat_id] = 100
+                thread1 = Thread(target=time_cheker, args=(call, chat_id))
+                thread1.start()
+                time_list[chat_id] = thread1
         elif type == 'continue':
             pass
     elif name_type == 'item':
         item = FOOD[name.split('_')[1]]
         item_weight = item[2]
         item_name = item[0]
-        if weight_list[user] != 0:
-            if weight_list[user] - item_weight < 0:
+        if weight_list[chat_id] != 0:
+            if weight_list[chat_id] - item_weight < 0:
                 bot.answer_callback_query(callback_query_id=call.id, text='Недостаточно места')
             else:
                 text = 'Мы положили в сумку: {}'
-                if item[1] in ['mother', 'daughter', 'son', 'father']:
-                    if item_name not in family.get(user, []):
+                if item[1] in ['mother', 'father', 'brother', 'sister']:
+                    if item_name not in family.get(chat_id, []):
                         text = 'Вы взяли с собой в бункер: {}'
-                        family[user] = family.get(user, []) + [item_name]
+                        family[chat_id] = family.get(chat_id, []) + [item_name]
                         bot.answer_callback_query(callback_query_id=call.id, text=text.format(
                             morph(item_name)[0].inflect({'accs'}).word))
-                        weight_list[user] -= item_weight
+                        weight_list[chat_id] -= item_weight
                     else:
                         bot.answer_callback_query(callback_query_id=call.id,
                                                   text='Вы уже взяли этого члена семьи')
                 else:
-                    package[user] = package.get(call.from_user.username, {})
-                    if package[user].get(item[1], 0) != item[3]:
-                        package[user][item[1]] = package[user].get(item[1], 0) + 1
-                        weight_list[user] -= item_weight
+                    package[chat_id] = package.get(chat_id, {})
+                    if package[chat_id].get(item[1], 0) != item[3]:
+                        package[chat_id][item[1]] = package[chat_id].get(item[1], 0) + 1
+                        weight_list[chat_id] -= item_weight
                         bot.answer_callback_query(callback_query_id=call.id,
                                                   text=text.format(
                                                       morph(item_name)[0].inflect({'accs'}).word))
     elif name_type == 'run':
-        print(user, 'убежал')
-        weight_list[user] = 0
+        print(chat_id, 'убежал')
+        weight_list[chat_id] = 0
 
 
-while True:
-    try:
-        bot.polling()
-    except Exception as e:
-        bot.polling()
-        print('бот упал, молодца\n', e)
+try:
+    bot.polling()
+except Exception as e:
+    bot.polling()
+    print('бот упал, молодца\n', e)
