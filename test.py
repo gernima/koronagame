@@ -1,3 +1,2 @@
-while True:
-    a = int(input('   :'))
-    print(1 / 5 * a ** 5 - a ** 2)
+a = [1, 2, 3, 4, 5]
+print(a[0:3])

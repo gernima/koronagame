@@ -7,32 +7,42 @@ import sqlite3
 from random import choice, random, sample
 from event import events
 
-bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
-print('start')
-
+bot = telebot.TeleBot('1049041175:AAFHw6FXE2-yCv7L4sJmwg50eImuAusJOG0')
 a = {0: {'inventory': {}, 'name': 'a', 'mother': 0, 'dad': 0, 'brother': 0, 'sister': 0, 'day': 1,
-         'dad_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕'},
-         'mother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌'},
-         'brother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '🤨'},
-         'sister_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😔'}}}
+         'dad_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕', 'weapon': ''},
+         'mother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌', 'weapon': ''},
+         'brother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '🤨', 'weapon': ''},
+         'sister_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😔', 'weapon': ''}}}
 con = sqlite3.connect("bd.db", check_same_thread=False)
 cur = con.cursor()
 time_list = {}
 family = {}
 user_list = []
 weight_list = {}
+wasteland_page = {}  # chat_id: num_page
 morph = pymorphy2.MorphAnalyzer().parse
-FOOD = {'father': ('Папа', 'father', 15, 1),
-        'sister': ('Сестра', 'sister',15, 1),
+FOOD = {'father': ('Папа', 'father', 15, 1),  # (rus_name, en_name, weight, n)
+        'sister': ('Сестра', 'sister', 15, 1),  # items in start
         'mother': ('Мама', 'mother', 15, 1),
         'brother': ('Брат', 'brother', 15, 1),
         'mask': ('маска', 'mask', 3, 1),
         'medicinechest': ('аптечка', 'medicinechest', 3, 1),
         'soap': ('мыло', 'soap', 3, 4),
-        'obrez': ('обрез', 'obrez', 50, 1, 1),
+        'obrez': ('обрез', 'obrez', 50, 1),
         'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
         'water': ('вода', 'water', 2, 6, 50)}
 package = {}
+WEAPON_DAMAGE = {'obrez': 1}  # name: damage
+things = {'father': ('Папа', 'father', 15, 1),  # items in game
+        'sister': ('Сестра', 'sister', 15, 1),
+        'mother': ('Мама', 'mother', 15, 1),
+        'brother': ('Брат', 'brother', 15, 1),
+        'mask': ('маска', 'mask', 3, 1),
+        'medicinechest': ('аптечка', 'medicinechest', 3, 1),
+        'soap': ('мыло', 'soap', 3, 4),
+        'obrez': ('обрез', 'obrez', 50, 1),
+        'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
+        'water': ('вода', 'water', 2, 6, 50)}
 
 
 @bot.callback_query_handler(func=lambda call: 'bunker' in call.data and 'wasteland_return' not in call.data)
@@ -49,6 +59,41 @@ def bunker_logic(call):
         bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                               text='Люди в пустоши:',
                               reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
+    elif 'bunker_weapon' in call.data:
+        splited_data = call.data.split('_')
+        who = splited_data[2]
+        weapon = splited_data[3]
+        prev_weapon = cur.execute(f"""Select weapon from wasteland where chat_id={call.from_user.id} and who='{who}'""").fetchone()[0]
+        if prev_weapon != '' and prev_weapon:
+            if a[call.from_user.id]['inventory'][prev_weapon]:
+                a[call.from_user.id]['inventory'][prev_weapon] += 1
+            else:
+                a[call.from_user.id]['inventory'][prev_weapon] = 1
+        if a[call.from_user.id]['inventory'][weapon]:
+            a[call.from_user.id]['inventory'][weapon] -= 1
+        else:
+            del a[call.from_user.id]['inventory'][weapon]
+        cur.execute(f"""UPDATE {who} SET weapon={weapon} where chat_id={call.from_user.id} and who={who}""")
+        edit_message_for_family(call, who)
+        con.commit()
+    elif 'weapon' in call.data:
+        weapons_menu = telebot.types.InlineKeyboardMarkup(row_width=3)
+        weapons_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
+        butts = []
+        who = call.data.split('_')[2]
+        for item in a[call.from_user.id]['inventory'].keys():
+            if item in WEAPON_DAMAGE.keys():
+                butts.append(telebot.types.InlineKeyboardButton(text=f'{things[item][0]}-⚔{WEAPON_DAMAGE[item]}', callback_data=f'bunker_weapon_{who}_{item}'))
+        for i in range(0, len(butts), 3):
+            if len(butts) - i >= 3:
+                weapons_menu.add(butts[i], butts[i + 1], butts[i + 2])
+            elif len(butts) - i >= 2:
+                weapons_menu.add(butts[i], butts[i + 1])
+            else:
+                weapons_menu.add(butts[i])
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text='Выберите чем вооружить:',
+                              reply_markup=weapons_menu)
     elif call.data == 'bunker_inventory':
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
@@ -112,7 +157,7 @@ def bunker_logic(call):
 def event_logic(call):
     text = call.data.split('_')
     event, button = text[1], ''.join(text[2:])
-    print(button)
+    # print(button)
     chat_id = call.message.chat.id
     family = [i for i in ['mother', 'dad', 'brother', 'sister'] if a[chat_id][i] != 0]
     if event == 'spider':
@@ -137,6 +182,48 @@ def event_logic(call):
         elif button == 'war':
             a[chat_id][people + '_bd']['immunity'] = min(people_immunity - 5, 0)
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f'Вы отбились от пауков, но один из них укусил {FOOD[people][0]}', reply_markup=markup)
+    else:
+        if text[2] in str(cur.execute("""Select activ_butts from events where event_id={}""".format(event)).fetchone()[0]).split(';'):
+            x = cur.execute("""Select hp_plus, immunity_plus from events where event_id={}""".format(event)).fetchall()[0]
+            sum_damage = 0
+            for who in ['dad', 'mother', 'sister', 'brother']:
+                if a[chat_id][who]:
+                    who_weapon = cur.execute("""Select weapon from {} where chat_id={}""".format(who, chat_id)).fetchone()
+                    if who_weapon in WEAPON_DAMAGE.keys():
+                        sum_damage += WEAPON_DAMAGE[who_weapon[0]]
+            need_weapon_damage = cur.execute(
+                """Select need_weapon_damage from events where event_id={}""".format(event)).fetchone()[0]
+            if need_weapon_damage == '' or need_weapon_damage == 'None':
+                need_weapon_damage = 0
+            if sum_damage >= int(need_weapon_damage):
+                whos = cur.execute("""Select who from events where event_id={}""".format(event)).fetchone()[0].split(';')
+                for who in whos:
+                    if x[0]:
+                        a[chat_id][who + '_bd']['hp'] += int(x[0])
+                    if x[1]:
+                        a[chat_id][who + '_bd']['immunity'] += int(x[1])
+                res_items = items_plus_and_minus(event, a[chat_id]['inventory'], items_minus_tf=False, bd_name='events')
+                a[chat_id]['inventory'] = res_items
+            else:
+                events_debaf(chat_id, event)
+        else:
+            events_debaf(chat_id, event)
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
+                              reply_markup=get_bunker_keyboard(call.from_user.id))
+
+
+def events_debaf(chat_id, event):
+    x = cur.execute("""Select hp_minus, immunity_minus from events where event_id={}""".format(event)).fetchall()[0]
+    whos = str(cur.execute("""Select who from events where event_id={}""".format(event)).fetchone()[0]).split(';')
+    if len(list(whos)) != 0 and whos[0] != 'None' and whos[0].strip() != '':
+        for who in whos:
+            if a[chat_id][who + '_bd']:
+                if x[0]:
+                    a[chat_id][who + '_bd']['hp'] += int(x[0])
+                if x[1]:
+                    a[chat_id][who + '_bd']['immunity'] += int(x[1])
+    a[chat_id]['inventory'] = items_plus_and_minus(event, a[chat_id]['inventory'], items_plus_tf=False, bd_name='events')
 
 
 @bot.callback_query_handler(func=lambda call: 'wasteland' in call.data)
@@ -152,7 +239,6 @@ def wasteland_logic(call):
                               reply_markup=get_bunker_keyboard(call.from_user.id))
     else:
         splited_data = call.data.split('_')
-        data = splited_data[2:]
         chat_id = call.from_user.id
         if call.data == 'wasteland_return':
             bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
@@ -175,31 +261,63 @@ def wasteland_logic(call):
                                   text='Люди в пустоши:',
                                   reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
         elif 'family' in call.data:
-            who_data = splited_data[2]
-            who = ''
-            if who_data == 'dad':
-                who = 'Папа'
-            if who_data == 'mother':
-                who = 'Мама'
-            if who_data == 'sister':
-                who = 'Сестра'
-            if who_data == 'brother':
-                who = 'Брат'
-            q = f"""Select text from wasteland where chat_id = {chat_id} and who = '{who_data}'"""
-            logs = "\n".join(con.execute(q).fetchone()[0].split(';'))
-            q = f"""Select is_return from wasteland where chat_id = {chat_id} and who = '{who_data}'"""
-            x = ''
-            if con.execute(q).fetchone()[0]:
-                q = f"""Select day_return from wasteland where chat_id = {chat_id} and who = '{who_data}'"""
-                x = f'Дней до возвращания: {con.execute(q).fetchone()[0] + 1}'
-            bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
-                                  text=f'{who} {a[chat_id][who_data + "_bd"]["emoji"]}'
-                                       f'\nЗдоровье: {a[call.from_user.id][who_data + "_bd"]["hp"]}'
-                                       f'\nСытость: {a[call.from_user.id][who_data + "_bd"]["hungry"]}'
-                                       f'\nЖажда: {a[call.from_user.id][who_data + "_bd"]["water"]}'
-                                       f'\nИммунитет: {a[call.from_user.id][who_data + "_bd"]["immunity"]}'
-                                       f'\n\n{logs}\n\n{x}',
-                                  reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
+            send_wasteland_logs(call, splited_data)
+        elif 'page' in call.data:
+            if 'prev' in call.data:
+                print(1, wasteland_page)
+                if wasteland_page[call.from_user.id] - 1 >= 0:
+                    wasteland_page[call.from_user.id] -= 1
+                    print(1, wasteland_page)
+                    send_wasteland_logs(call, splited_data)
+            else:
+                who_data = splited_data[2]
+                q = f"""Select text from wasteland where chat_id = {call.from_user.id} and who = '{who_data}'"""
+                print(wasteland_page, len([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')]))
+                try:
+                    if len([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')]) > wasteland_page[call.from_user.id] * 20:
+                        print(1)
+                        wasteland_page[call.from_user.id] += 1
+                        send_wasteland_logs(call, splited_data)
+                    else:
+                        print(wasteland_page)
+                except Exception as e:
+                    print(e)
+                    pass
+
+
+def return_who_data(who_data):
+    who = ''
+    if who_data == 'dad':
+        who = 'Папа'
+    if who_data == 'mother':
+        who = 'Мама'
+    if who_data == 'sister':
+        who = 'Сестра'
+    if who_data == 'brother':
+        who = 'Брат'
+    return who
+
+
+def send_wasteland_logs(call, splited_data):
+    who_data = splited_data[2]
+    who = return_who_data(who_data)
+    wasteland_page[call.from_user.id] = 0
+    q = f"""Select text from wasteland where chat_id = {call.from_user.id} and who = '{who_data}'"""
+    n = wasteland_page[call.from_user.id] * 20
+    logs = '\n'.join([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')][n: n + 20])
+    q = f"""Select is_return from wasteland where chat_id = {call.from_user.id} and who = '{who_data}'"""
+    x = ''
+    if con.execute(q).fetchone()[0]:
+        q = f"""Select day_return from wasteland where chat_id = {call.from_user.id} and who = '{who_data}'"""
+        x = f'Дней до возвращания: {con.execute(q).fetchone()[0] + 1}'
+    bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                          text=f'{who} {a[call.from_user.id][who_data + "_bd"]["emoji"]}'
+                               f'\nЗдоровье: {a[call.from_user.id][who_data + "_bd"]["hp"]}'
+                               f'\nСытость: {a[call.from_user.id][who_data + "_bd"]["hungry"]}'
+                               f'\nЖажда: {a[call.from_user.id][who_data + "_bd"]["water"]}'
+                               f'\nИммунитет: {a[call.from_user.id][who_data + "_bd"]["immunity"]}'
+                               f'\nСтраница: {wasteland_page[call.from_user.id]}\n{logs}\n\n{x}',
+                          reply_markup=get_wasteland_mans_keyboard(call.from_user.id, arrows=True, who_arrow=who_data))
 
 
 def water_and_canned(call, name_):
@@ -214,22 +332,19 @@ def water_and_canned(call, name_):
     return markup
 
 
-def bd_family(chat_id, data):
-    x = 0
-    for i in a[chat_id]['dad_bd'].keys():
-        a[chat_id][i] = data[x]
-        x += 1
+def bd_family(chat_id, data, who):
+    if data:
+        x = 0
+        data = list(data)[1:]
+        for i in a[chat_id][who + '_bd'].keys():
+            a[chat_id][who + '_bd'][i] = data[x]
+            x += 1
 
 
 def event_run(message):
-    chance = random()
-    event = ''
-    if chance < .3:
-        event = choice(events['good'])
-    elif .6> chance > .3:
-        event = choice(events['bad'])
-    else:
-        event = choice(events['choice'])
+    events_bd = [x[0] for x in cur.execute("""Select event_id from events""").fetchall()]
+    event = choice(events['choice'] + events['good'] + events['bad'] + events_bd)
+    # event = choice(events_bd)
     markup = types.InlineKeyboardMarkup()
     package = set(list(a[message.chat.id]['inventory']))
     if event == 'пауки в бункере':
@@ -262,37 +377,31 @@ def event_run(message):
             bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text='Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
         else:
             event_run(message)
+    else:
+        while True:
+            q = """Select choiced from events where event_id={}""".format(event)
+            if not cur.execute(q).fetchone()[0]:
+                break
+            else:
+                event = choice(events_bd)
+        bd_events(message.chat.id, event, message)
 
 
-def bunker(message):
-    get_data_from_bd(message.chat.id)
-    bot.send_message(message.chat.id, f'Локация: Бункер\nДень {a[message.chat.id]["day"]}',
-                     reply_markup=get_bunker_keyboard(message.chat.id))
-
-
-def get_data_from_bd(chat_id):
-    try:
-        if chat_id not in a.keys():
-            a[chat_id] = a[0]
-        q = """Select {} from {} where chat_id == {}"""
-        bd_family(chat_id, list(cur.execute(q.format('*', 'dad', chat_id)).fetchone()[1:]))
-        bd_family(chat_id, list(cur.execute(q.format('*', 'mother', chat_id)).fetchone()[1:]))
-        bd_family(chat_id, list(cur.execute(q.format('*', 'brother', chat_id)).fetchone()[1:]))
-        bd_family(chat_id, list(cur.execute(q.format('*', 'sister', chat_id)).fetchone()[1:]))
-        inv = {}
-        b = cur.execute(q.format('inventory', 'saves', chat_id)).fetchone()[0].split(';')
-        if len(b) > 0 and b[0] != '':
-            for i in [x.split(':') for x in b]:
-                inv[i[0]] = i[1]
-            a[chat_id]['inventory'] = inv
-        a[chat_id]['name'] = cur.execute(q.format('name', 'saves', chat_id)).fetchone()[0]
-        a[chat_id]['mother'] = cur.execute(q.format('mother', 'saves', chat_id)).fetchone()[0]
-        a[chat_id]['dad'] = cur.execute(q.format('dad', 'saves', chat_id)).fetchone()[0]
-        a[chat_id]['brother'] = cur.execute(q.format('brother', 'saves', chat_id)).fetchone()[0]
-        a[chat_id]['sister'] = cur.execute(q.format('sister', 'saves', chat_id)).fetchone()[0]
-        a[chat_id]['day'] = cur.execute(q.format('day', 'saves', chat_id)).fetchone()[0]
-    except:
-        pass
+def bd_events(chat_id, event_id, message):
+    tf = True
+    res_items = a[chat_id]['inventory']
+    if res_items:
+        res_items, tf = event_items(event_id, res_items, tf, bd_name='events')
+    if tf:
+        markup = types.InlineKeyboardMarkup()
+        butts = []
+        event_butts = str(cur.execute("""Select butts from events where event_id={}""".format(event_id)).fetchone()[0]).split(';')
+        for butt in event_butts:
+            butts.append(types.InlineKeyboardButton(text=str(butt), callback_data=f'event_{event_id}_{butt}'))
+        markup.add(*butts)
+        text = cur.execute("""Select text from events where event_id={}""".format(event_id))
+        bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id,
+                              text=text, reply_markup=markup)
 
 
 def get_bunker_keyboard(chat_id):
@@ -319,52 +428,28 @@ def get_bunker_keyboard(chat_id):
     return bunker
 
 
-def get_wasteland_mans_keyboard(chat_id):
+def get_wasteland_mans_keyboard(chat_id, arrows=False, who_arrow=''):
     keyboard = telebot.types.InlineKeyboardMarkup(row_width=2)
     q = f"""Select who from wasteland where chat_id = {chat_id}"""
     who = con.execute(q).fetchall()
     butts = []
-    keyboard.add(telebot.types.InlineKeyboardButton(text=f'Назад',
-                                                    callback_data='wasteland_return'))
+    keyboard.add(telebot.types.InlineKeyboardButton(text=f'Назад', callback_data='wasteland_return'))
+    if arrows:
+        keyboard.add(telebot.types.InlineKeyboardButton(text=f'Пред.Стр', callback_data=f'wasteland_prev_{who_arrow}_page'),
+                     telebot.types.InlineKeyboardButton(text=f'След.Стр', callback_data=f'wasteland_next_{who_arrow}_page'))
     for i in who:
         i = i[0]
         q = f"""Select is_return from wasteland where chat_id={chat_id} and who='{i}'"""
-        if i == 'dad':
-            butts.append(telebot.types.InlineKeyboardButton(text=f'Папа {a[chat_id][f"{i}_bd"]["emoji"]}',
-                                                            callback_data=f'wasteland_family_{i}'))
-            if cur.execute(q).fetchone()[0]:
-                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
-                                                                callback_data=f'wasteland_return_wasteland_{i}'))
-            else:
-                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
-                                                                callback_data=f'wasteland_return_bunker_{i}'))
-        elif i == 'mother':
-            butts.append(telebot.types.InlineKeyboardButton(text=f'Мама {a[chat_id][f"{i}_bd"]["emoji"]}',
-                                                            callback_data=f'wasteland_family_{i}'))
-            if cur.execute(q).fetchone()[0]:
-                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
-                                                                callback_data=f'wasteland_return_wasteland_{i}'))
-            else:
-                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
-                                                                callback_data=f'wasteland_return_bunker_{i}'))
-        elif i == 'brother':
-            butts.append(telebot.types.InlineKeyboardButton(text=f'Брат {a[chat_id][f"{i}_bd"]["emoji"]}',
-                                                            callback_data=f'wasteland_family_{i}'))
-            if cur.execute(q).fetchone()[0]:
-                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
-                                                                callback_data=f'wasteland_return_wasteland_{i}'))
-            else:
-                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
-                                                                callback_data=f'wasteland_return_bunker_{i}'))
-        elif i == 'sister':
-            butts.append(telebot.types.InlineKeyboardButton(text=f'Сестра {a[chat_id][f"{i}_bd"]["emoji"]}',
-                                                            callback_data=f'wasteland_family_{i}'))
-            if cur.execute(q).fetchone()[0]:
-                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
-                                                                callback_data=f'wasteland_return_wasteland_{i}'))
-            else:
-                butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
-                                                                callback_data=f'wasteland_return_bunker_{i}'))
+        who_wast = return_who_data(i)
+        butts.append(telebot.types.InlineKeyboardButton(text=f'{who_wast} {a[chat_id][f"{i}_bd"]["emoji"]}',
+                                                        callback_data=f'wasteland_family_{i}'))
+        if cur.execute(q).fetchone()[0]:
+            butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
+                                                            callback_data=f'wasteland_return_wasteland_{i}'))
+        else:
+            butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
+                                                            callback_data=f'wasteland_return_bunker_{i}'))
+
     keyboard.add(*butts)
     return keyboard
 
@@ -397,7 +482,8 @@ def add_wasteland_event(count, chat_id):
                 a[chat_id][who] = 1
                 b = cur.execute("""Select items from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[
                     0].split(';')
-                if len(b) != 0:
+
+                if len(b) != 0 and b[0].strip() != '':
                     for i in [x.split(':') for x in b]:
                         if i[0] in a[chat_id]['inventory'].keys():
                             n = int(i[1]) + int(a[chat_id]['inventory'][i[0]])
@@ -405,7 +491,6 @@ def add_wasteland_event(count, chat_id):
                         else:
                             a[chat_id]['inventory'][i[0]] = int(i[1])
                 cur.execute("""Delete from wasteland where chat_id={} and who='{}'""".format(chat_id, who))
-    con.commit()
 
 
 def choice_event_id(event_list):
@@ -435,7 +520,7 @@ def wasteland_event_system(chat_id, who, day, event_id):
             res_items[i[0]] = int(i[1])
     tf = True
     if res_items:
-        wasteland_event_items(event_id, res_items)
+        res_items, tf = event_items(event_id, res_items, tf)
     next_event_id = \
         cur.execute("""Select next_event_id from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]
     if next_event_id and tf:
@@ -448,14 +533,20 @@ def wasteland_event_system(chat_id, who, day, event_id):
                     break
     if tf:
         text = f'{cur.execute("""Select text from wasteland where who="{}" and chat_id={}""".format(who, chat_id)).fetchone()[0]}День {day}: {cur.execute("""Select text from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]};'
-        cur.execute("""UPDATE wasteland SET text=?, day=? where chat_id=?""", (text, day, chat_id))
         x = cur.execute("""Select hp, immunity from wasteland_events where event_id={}""".format(event_id)).fetchall()[0]
-        if x[0]:
-            a[chat_id][who + '_bd']['hp'] += int(x[0])
-        if x[1]:
-            a[chat_id][who + '_bd']['immunity'] += int(x[1])
+        who_weapon = cur.execute("""Select weapon from {} where chat_id={}""".format(who, chat_id)).fetchone()[0]
+        need_weapon_damage = cur.execute(
+            """Select need_weapon_damage from wasteland_events where event_id={}""".format(event_id)).fetchone()[0]
+        if who_weapon in WEAPON_DAMAGE.keys() and WEAPON_DAMAGE[who_weapon] >= int(need_weapon_damage):
+            res_items = items_plus_and_minus(event_id, res_items)
+        else:
+            if x[0]:
+                a[chat_id][who + '_bd']['hp'] += int(x[0])
+            if x[1]:
+                a[chat_id][who + '_bd']['immunity'] += int(x[1])
+            res_items = items_plus_and_minus(event_id, res_items)
         res_items = ';'.join([f'{x}:{res_items[x]}' for x in res_items.keys()])
-        cur.execute("""UPDATE wasteland SET items=? where chat_id=? and who=?""", (res_items, chat_id, who))
+        cur.execute("""UPDATE wasteland SET text=?, day=?, items=? where chat_id=? and who=?""", (text, day, res_items, chat_id, who))
         if next_event_id:
             if type(next_event_id) is type(int()):
                 wasteland_event_system(chat_id, who, day, next_event_id)
@@ -463,130 +554,194 @@ def wasteland_event_system(chat_id, who, day, event_id):
                 wasteland_event_system(chat_id, who, day, choice(next_event_id.split(';')))
 
 
-def wasteland_event_items(event_id, res_items, tf=True):
-    first_items = res_items
-    items_plus = \
-        cur.execute("""Select items_plus from wasteland_events where event_id={}""".format(event_id)).fetchone()[
-            0]
-    if items_plus and items_plus[0].strip() != '':
-        items_plus = items_plus.split(';')
-        if len(items_plus) > 0 and items_plus[0].strip() != '':
-            for i in [x.split(':') for x in items_plus]:
-                if i[0] in res_items.keys():
-                    res_items[i[0]] = int(res_items[i[0]]) + int(i[1])
-                else:
-                    res_items[i[0]] = int(i[1])
-    items_minus = \
-        cur.execute("""Select items_minus from wasteland_events where event_id={}""".format(event_id)).fetchone()[
-            0]
-    if items_minus and items_minus[0].strip() != '':
-        items_minus = items_minus.split(';')
-        if len(items_minus) > 0 and items_minus[0].strip() != '':
-            for i in [x.split(':') for x in items_minus]:
-                if i[0] in res_items.keys():
-                    if res_items[i[0]] - int(i[1]) > 0:
-                        res_items[i[0]] = int(res_items[i[0]]) - int(i[1])
-                    elif res_items[i[0]] - int(i[1]) == 0:
-                        del res_items[i[0]]
+def items_plus_and_minus(event_id, res_items, bd_name='wasteland_events', items_plus_tf=True, items_minus_tf=True):
+    if items_plus_tf:
+        items_plus = \
+            cur.execute("""Select items_plus from {} where event_id={}""".format(bd_name, event_id)).fetchone()[0]
+        if items_plus and items_plus[0].strip() != '':
+            items_plus = items_plus.split(';')
+            if len(items_plus) > 0 and items_plus[0].strip() != '':
+                for i in [x.split(':') for x in items_plus]:
+                    if i[0] in res_items.keys():
+                        res_items[i[0]] = int(res_items[i[0]]) + int(i[1])
                     else:
-                        tf = False
-                        break
-    if tf:
-        return res_items, tf
-    else:
-        return first_items, tf
+                        res_items[i[0]] = int(i[1])
+    if items_minus_tf:
+        items_minus = \
+            cur.execute("""Select items_minus from {} where event_id={}""".format(bd_name, event_id)).fetchone()[0]
+        if items_minus and items_minus[0].strip() != '':
+            items_minus = items_minus.split(';')
+            if len(items_minus) > 0 and items_minus[0].strip() != '':
+                for i in [x.split(':') for x in items_minus]:
+                    if i[0] in res_items.keys():
+                        if res_items[i[0]] - int(i[1]) > 0:
+                            res_items[i[0]] = int(res_items[i[0]]) - int(i[1])
+                        elif res_items[i[0]] - int(i[1]) == 0:
+                            del res_items[i[0]]
+    return res_items
 
 
-def next_event_items(res_items, event_id, tf):
-    if tf:
-        res_items, tf = wasteland_event_items(event_id, res_items, tf)
+def event_items(event_id, res_items, tf=True, bd_name='wasteland_events'):
+    try:
         if tf:
-            next_event_id = \
-                cur.execute("""Select next_event_id from wasteland_events where event_id={}""".format(event_id)).fetchone()[
-                    0]
-            if next_event_id and str(next_event_id).strip() != '':
-                if type(next_event_id) is type(int()):
-                    res_items, tf = next_event_items(res_items, next_event_id, tf)
-                else:
-                    next_event_id = next_event_id.split(';')
-                    for next_event_i in next_event_id:
-                        res_items, tf = next_event_items(res_items, next_event_i, tf)
-                        if tf is False:
-                            break
+            items_minus = \
+                cur.execute("""Select items_minus from {} where event_id={}""".format(bd_name, event_id)).fetchone()
+            if items_minus:
+                if items_minus and items_minus[0] != '' and items_minus[0] is not None:
+                    items_minus = items_minus[0].split(';')
+                    if len(items_minus) > 0 and items_minus[0].strip() != '' and items_minus[0] != 'None':
+                        for i in [x.split(':') for x in items_minus]:
+                            if i[0] in res_items.keys():
+                                if res_items[i[0]] - int(i[1]) < 0:
+                                    tf = False
+                                    break
+    except Exception as e:
+        print(event_id, res_items, bd_name, e)
     return res_items, tf
 
 
+def next_event_items(res_items, event_id, tf, bd_name='wasteland_events'):
+    res_items, tf = event_items(event_id, res_items, tf)
+    if tf:
+        next_event_id = \
+            cur.execute("""Select next_event_id from {} where event_id={}""".format(bd_name, event_id)).fetchone()
+        if next_event_id[0] and str(next_event_id).strip() != '' and next_event_id != 'None':
+            if type(next_event_id[0]) is type(int()):
+                res_items, tf = next_event_items(res_items, next_event_id, tf)
+            else:
+                print(next_event_id[0])
+                next_event_id = next_event_id[0].split(';')
+                for next_event_i in next_event_id:
+                    res_items, tf = next_event_items(res_items, next_event_i, tf)
+                    if tf is False:
+                        break
+    return res_items, tf
+
+
+def update_family_bd(chat_id, who):
+    q = """UPDATE {} SET hp = {}, hungry = {}, immunity = {}, emoji = "{}", water = {}, weapon= "{}" WHERE chat_id == {}"""
+    cur.execute(q.format(who, a[chat_id][who + '_bd']['hp'], a[chat_id][who + '_bd']['hungry'],
+                         a[chat_id][who + '_bd']['immunity'], a[chat_id][who + '_bd']['emoji'],
+                         a[chat_id][who + '_bd']['water'], a[chat_id][who + '_bd']['weapon'], chat_id))
+
+
 def create_family_bd(chat_id):
-    if cur.execute("""Select chat_id from dad where chat_id == {}""".format(chat_id)).fetchone():
-        q = """UPDATE {} SET hp = {}, hungry = {}, immunity = {}, emoji = "{}", water = {} WHERE chat_id == {}"""
-        cur.execute(q.format('dad', a[chat_id]['dad_bd']['hp'], a[chat_id]['dad_bd']['hungry'],
-                             a[chat_id]['dad_bd']['immunity'], a[chat_id]['dad_bd']['emoji'],
-                             a[chat_id]['dad_bd']['water'], chat_id))
-        cur.execute(q.format('mother', a[chat_id]['mother_bd']['hp'], a[chat_id]['mother_bd']['hungry'],
-                             a[chat_id]['mother_bd']['immunity'], a[chat_id]['mother_bd']['emoji'],
-                             a[chat_id]['mother_bd']['water'], chat_id))
-        cur.execute(q.format('brother', a[chat_id]['brother_bd']['hp'], a[chat_id]['brother_bd']['hungry'],
-                             a[chat_id]['brother_bd']['immunity'], a[chat_id]['brother_bd']['emoji'],
-                             a[chat_id]['brother_bd']['water'], chat_id))
-        cur.execute(q.format('sister', a[chat_id]['sister_bd']['hp'], a[chat_id]['sister_bd']['hungry'],
-                             a[chat_id]['sister_bd']['immunity'], a[chat_id]['sister_bd']['emoji'],
-                             a[chat_id]['sister_bd']['water'], chat_id))
+    if chat_id in [int(x[0]) for x in cur.execute("""Select chat_id from dad""").fetchall()] or \
+            chat_id in [int(x[0]) for x in cur.execute("""Select chat_id from mother""").fetchall()] or \
+            chat_id in [int(x[0]) for x in cur.execute("""Select chat_id from brother""").fetchall()] or \
+            chat_id in [int(x[0]) for x in cur.execute("""Select chat_id from sister""").fetchall()]:
+        if a[chat_id]['dad']:
+            update_family_bd(chat_id, 'dad')
+        if a[chat_id]['mother']:
+            update_family_bd(chat_id, 'mother')
+        if a[chat_id]['brother']:
+            update_family_bd(chat_id, 'brother')
+        if a[chat_id]['sister']:
+            update_family_bd(chat_id, 'sister')
     else:
-        cur.execute("""INSERT INTO dad VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chat_id, a[chat_id]['dad_bd']['hp'], a[chat_id]['dad_bd']['hungry'],
-                     a[chat_id]['dad_bd']['water'], a[chat_id]['dad_bd']['immunity'],
-                     a[chat_id]['dad_bd']['emoji']))
-        cur.execute("""INSERT INTO mother VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chat_id, a[chat_id]['mother_bd']['hp'], a[chat_id]['mother_bd']['hungry'],
-                     a[chat_id]['mother_bd']['water'], a[chat_id]['mother_bd']['immunity'],
-                     a[chat_id]['mother_bd']['emoji']))
-        cur.execute("""INSERT INTO brother VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chat_id, a[chat_id]['brother_bd']['hp'], a[chat_id]['brother_bd']['hungry'],
-                     a[chat_id]['brother_bd']['water'], a[chat_id]['brother_bd']['immunity'],
-                     a[chat_id]['brother_bd']['emoji']))
-        cur.execute("""INSERT INTO sister VALUES (?, ?, ?, ?, ?, ?)""",
-                    (chat_id, a[chat_id]['sister_bd']['hp'], a[chat_id]['sister_bd']['hungry'],
-                     a[chat_id]['sister_bd']['water'], a[chat_id]['sister_bd']['immunity'],
-                     a[chat_id]['sister_bd']['emoji']))
+        if a[chat_id]['dad']:
+            insert_bd_family(chat_id, 'dad')
+        if a[chat_id]['mother']:
+            insert_bd_family(chat_id, 'mother')
+        if a[chat_id]['brother']:
+            insert_bd_family(chat_id, 'brother')
+        if a[chat_id]['sister']:
+            insert_bd_family(chat_id, 'sister')
     con.commit()
 
 
-def edit_message_for_family(call):
+def insert_bd_family(chat_id, who):
+    q = """INSERT INTO {} VALUES (?, ?, ?, ?, ?, ?, ?)""".format(who)
+    cur.execute(q,
+                (chat_id, a[chat_id][who + '_bd']['hp'], a[chat_id][who + '_bd']['hungry'],
+                 a[chat_id][who + '_bd']['water'], a[chat_id][who + '_bd']['immunity'],
+                 a[chat_id][who + '_bd']['emoji'], a[chat_id][who + '_bd']['weapon']))
+
+
+def get_data_from_bd(chat_id):
+    if chat_id not in a.keys():
+        a[chat_id] = a[0]
+    q = """Select {} from {} where chat_id = {}"""
+    bd_family(chat_id, cur.execute(q.format('*', 'dad', chat_id)).fetchone(), 'dad')
+    bd_family(chat_id, cur.execute(q.format('*', 'mother', chat_id)).fetchone(), 'mother')
+    bd_family(chat_id, cur.execute(q.format('*', 'brother', chat_id)).fetchone(), 'brother')
+    bd_family(chat_id, cur.execute(q.format('*', 'sister', chat_id)).fetchone(), 'sister')
+    inv = {}
+    b = cur.execute(q.format('inventory', 'saves', chat_id)).fetchone()[0].split(';')
+    if len(b) > 0 and b[0] != '':
+        for i in [x.split(':') for x in b]:
+            inv[i[0]] = int(i[1])
+        a[chat_id]['inventory'] = inv
+    a[chat_id]['name'] = cur.execute(q.format('name', 'saves', chat_id)).fetchone()[0]
+    a[chat_id]['mother'] = cur.execute(q.format('mother', 'saves', chat_id)).fetchone()[0]
+    a[chat_id]['dad'] = cur.execute(q.format('dad', 'saves', chat_id)).fetchone()[0]
+    a[chat_id]['brother'] = cur.execute(q.format('brother', 'saves', chat_id)).fetchone()[0]
+    a[chat_id]['sister'] = cur.execute(q.format('sister', 'saves', chat_id)).fetchone()[0]
+    a[chat_id]['day'] = cur.execute(q.format('day', 'saves', chat_id)).fetchone()[0]
+
+
+def bunker(message):
+    get_data_from_bd(message.chat.id)
+    bot.send_message(message.chat.id, f'Локация: Бункер\nДень {a[message.chat.id]["day"]}',
+                     reply_markup=get_bunker_keyboard(message.chat.id))
+
+
+# chat_ids = [int(x[0]) for x in cur.execute("""Select chat_id from saves""").fetchall()]
+# if chat_ids:
+#     for chat_id in chat_ids:
+#         sms = bot.send_message(chat_id=chat_id, text='restarting')
+#         get_data_from_bd(chat_id)
+#         bot.edit_message_text(chat_id=chat_id, message_id=sms.message_id,
+#                               text=f'Локация: Бункер\nДень {a[chat_id]["day"]}',
+#                               reply_markup=get_bunker_keyboard(chat_id))
+#         print(a[chat_id])
+print('start')
+
+
+def edit_message_for_family(call, who=None):
+    if who is None:
+        who = ''
+        if call.data[len('bunker_family_'):] == 'dad':
+            who = 'Папа'
+        elif call.data[len('bunker_family_'):] == 'mother':
+            who = 'Мама'
+        elif call.data[len('bunker_family_'):] == 'sister':
+            who = 'Сестра'
+        elif call.data[len('bunker_family_'):] == 'brother':
+            who = 'Брат'
     who_bd = call.data[len('bunker_family_'):] + '_bd'
-    who = ''
-    if call.data[len('bunker_family_'):] == 'dad':
-        who = 'Папа'
-    elif call.data[len('bunker_family_'):] == 'mother':
-        who = 'Мама'
-    elif call.data[len('bunker_family_'):] == 'sister':
-        who = 'Сестра'
-    elif call.data[len('bunker_family_'):] == 'brother':
-        who = 'Брат'
     family_menu = telebot.types.InlineKeyboardMarkup()
     family_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
     family_menu.add(telebot.types.InlineKeyboardButton(text='Отправить в пустошь',
                                                        callback_data=f"wasteland_{call.data[len('bunker_family_'):]}_go"))
     family_menu.add(telebot.types.InlineKeyboardButton(text='Кормить', callback_data='bunker_family_feed'))
+    family_menu.add(telebot.types.InlineKeyboardButton(text='Вооружить', callback_data=f'bunker_family_{call.data[len("bunker_family_"):]}_weapon'))
+    if a[call.from_user.id][who_bd]["weapon"]:
+        weapon = a[call.from_user.id][who_bd]["weapon"] + '-⚔' + str(WEAPON_DAMAGE[a[call.from_user.id][who_bd]["weapon"]])
+    else:
+        weapon = 'ничего'
     bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                           text=f'{who} {a[call.from_user.id][who_bd]["emoji"]}'
                                f'\nЗдоровье: {a[call.from_user.id][who_bd]["hp"]}'
                                f'\nСытость: {a[call.from_user.id][who_bd]["hungry"]}'
                                f'\nЖажда: {a[call.from_user.id][who_bd]["water"]}'
-                               f'\nИммунитет: {a[call.from_user.id][who_bd]["immunity"]}',
+                               f'\nИммунитет: {a[call.from_user.id][who_bd]["immunity"]}'
+                               f'\nВооружение: {weapon}',
                           reply_markup=family_menu)
 
 
 def save_update_to_bd(chat_id):
-    x = cur.execute("""Select chat_id from saves where chat_id == ?""", (chat_id,)).fetchone()
-    if x:
+    if chat_id in [int(x[0]) for x in cur.execute("""Select chat_id from saves""").fetchall()]:
         inventory = ';'.join([f'{x}:{a[chat_id]["inventory"][x]}' for x in a[chat_id]['inventory'].keys()])
         cur.execute(
-            """UPDATE saves SET chat_id = ?, inventory = ?, name = ?, mother = ?, dad = ?, brother = ?, sister = ?, day = ? WHERE chat_id == ?""",
+            """UPDATE saves SET chat_id = ?, inventory = ?, name = ?, mother = ?, dad = ?, brother = ?, sister = ?, day = ? WHERE chat_id = ?""",
             (chat_id, inventory, a[chat_id]['name'], a[chat_id]['mother'], a[chat_id]['dad'],
              a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], chat_id))
-        create_family_bd(chat_id)
     else:
-        print(family)
+        a[chat_id]['dad'] = 0
+        a[chat_id]['sister'] = 0
+        a[chat_id]['brother'] = 0
+        a[chat_id]['mother'] = 0
         if family.get(chat_id, False):
             if 'Папа' in family[chat_id]:
                 a[chat_id]['dad'] = 1
@@ -596,13 +751,12 @@ def save_update_to_bd(chat_id):
                 a[chat_id]['brother'] = 1
             if 'Мама' in family[chat_id]:
                 a[chat_id]['mother'] = 1
-            if family[chat_id]:
-                del family[chat_id]
+            del family[chat_id]
         inventory = ';'.join([f'{x}:{a[chat_id]["inventory"][x]}' for x in a[chat_id]['inventory'].keys()])
         cur.execute("""INSERT INTO saves VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (chat_id, inventory, a[chat_id]['name'], a[chat_id]['mother'], a[chat_id]['dad'],
                      a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day']))
-        create_family_bd(chat_id)
+    create_family_bd(chat_id)
     con.commit()
 
 
@@ -693,7 +847,7 @@ def time_cheker(call, chat_id):
             for i in (package, weight_list):
                 if chat_id in i:
                     del i[chat_id]
-            car(call.message)
+            # car(call.message)
             bunker(call.message)
             return
 
@@ -803,8 +957,4 @@ def callback(call):
         weight_list[chat_id] = 0
 
 
-try:
-    bot.polling()
-except Exception as e:
-    bot.polling()
-    print('бот упал, молодца\n', e)
+bot.polling()
