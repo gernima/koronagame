@@ -7,7 +7,8 @@ import sqlite3
 from random import choice, random, sample
 from event import events
 
-bot = telebot.TeleBot('1049041175:AAFHw6FXE2-yCv7L4sJmwg50eImuAusJOG0')
+bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
+print('start')
 a = {0: {'inventory': {}, 'name': 'a', 'mother': 0, 'dad': 0, 'brother': 0, 'sister': 0, 'day': 1,
          'dad_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕', 'weapon': ''},
          'mother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌', 'weapon': ''},
@@ -21,8 +22,9 @@ user_list = []
 weight_list = {}
 wasteland_page = {}  # chat_id: num_page
 morph = pymorphy2.MorphAnalyzer().parse
-FOOD = {'father': ('Папа', 'father', 15, 1),  # (rus_name, en_name, weight, n)
-        'sister': ('Сестра', 'sister', 15, 1),  # items in start
+WEAPON_DAMAGE = {'obrez': 1}  # name: damage
+FOOD = {'dad': ('Папа', 'dad', 15, 1),  # (rus_name, en_name, weight, n)
+        'sister': ('Сестра', 'sister',15, 1),
         'mother': ('Мама', 'mother', 15, 1),
         'brother': ('Брат', 'brother', 15, 1),
         'mask': ('маска', 'mask', 3, 1),
@@ -32,17 +34,6 @@ FOOD = {'father': ('Папа', 'father', 15, 1),  # (rus_name, en_name, weight, 
         'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
         'water': ('вода', 'water', 2, 6, 50)}
 package = {}
-WEAPON_DAMAGE = {'obrez': 1}  # name: damage
-things = {'father': ('Папа', 'father', 15, 1),  # items in game
-        'sister': ('Сестра', 'sister', 15, 1),
-        'mother': ('Мама', 'mother', 15, 1),
-        'brother': ('Брат', 'brother', 15, 1),
-        'mask': ('маска', 'mask', 3, 1),
-        'medicinechest': ('аптечка', 'medicinechest', 3, 1),
-        'soap': ('мыло', 'soap', 3, 4),
-        'obrez': ('обрез', 'obrez', 50, 1),
-        'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
-        'water': ('вода', 'water', 2, 6, 50)}
 
 
 @bot.callback_query_handler(func=lambda call: 'bunker' in call.data and 'wasteland_return' not in call.data)
@@ -135,6 +126,8 @@ def bunker_logic(call):
         if 'cannedfood' in call.data:
             if a[call.message.chat.id][name]['hungry'] <= 90 and a[call.from_user.id]["inventory"].get("cannedfood", 0) > 0:
                 a[call.message.chat.id][name]['hungry'] += 10
+                a[call.from_user.id]["inventory"]["cannedfood"] -= 1
+                item_zero(call.message, "cannedfood")
             else:
                 return
         else:
@@ -157,7 +150,6 @@ def bunker_logic(call):
 def event_logic(call):
     text = call.data.split('_')
     event, button = text[1], ''.join(text[2:])
-    # print(button)
     chat_id = call.message.chat.id
     family = [i for i in ['mother', 'dad', 'brother', 'sister'] if a[chat_id][i] != 0]
     if event == 'spider':
@@ -173,8 +165,7 @@ def event_logic(call):
                 'растройство, а так же их покусали пауки, падение иммунитета у всей семьи', reply_markup=markup)
         elif button == 'medicinechest':
             a[call.message.chat.id]['inventory']['medicinechest'] -= 1
-            if a[call.message.chat.id]['inventory']['medicinechest'] == 0:
-                del a[call.message.chat.id]['inventory']['medicinechest']
+            item_zero(call.message, 'medicinechest')
             a[chat_id][people + '_bd']['immunity'] = max(people_immunity + 10, 100)
             people = morph(FOOD[people][0])[0].inflect({"gent"}).word
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Пауки были вымешленные, вы приняли таблетки и все'
@@ -239,6 +230,7 @@ def wasteland_logic(call):
                               reply_markup=get_bunker_keyboard(call.from_user.id))
     else:
         splited_data = call.data.split('_')
+        data = splited_data[2:]
         chat_id = call.from_user.id
         if call.data == 'wasteland_return':
             bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
@@ -324,10 +316,10 @@ def water_and_canned(call, name_):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
                types.InlineKeyboardButton(
-                   text=f'{a[call.from_user.id]["inventory"].get("cannedfood", 0)} x Консервы + 10 сытости',
+                   text=f'{a[call.from_user.id]["inventory"].get("cannedfood", 0)} x Консервы + 50 сытости',
                    callback_data=f'bunker_food_cannedfood_{name_}'),
                types.InlineKeyboardButton(
-                   text=f'{a[call.from_user.id]["inventory"].get("water", 0)} x Вода + 10 вода',
+                   text=f'{a[call.from_user.id]["inventory"].get("water", 0)} x Вода + 50 вода',
                    callback_data=f'bunker_food_water_{name_}'))
     return markup
 
@@ -372,8 +364,7 @@ def event_run(message):
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
             a[message.chat.id]['inventory']['cannedfood'] -= 1
-            if a[message.chat.id]['inventory']['cannedfood'] == 0:
-                del a[message.chat.id]['inventory']['cannedfood']
+            item_zero(message, 'cannedfood')
             bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text='Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
         else:
             event_run(message)
@@ -386,6 +377,16 @@ def event_run(message):
                 event = choice(events_bd)
         bd_events(message.chat.id, event, message)
 
+
+def item_zero(message, item):
+    if a[message.chat.id]['inventory'][item] == 0:
+        del a[message.chat.id]['inventory'][item]
+
+
+def bunker(message):
+    get_data_from_bd(message.chat.id)
+    bot.send_message(message.chat.id, f'Локация: Бункер\nДень {a[message.chat.id]["day"]}',
+                     reply_markup=get_bunker_keyboard(message.chat.id))
 
 def bd_events(chat_id, event_id, message):
     tf = True
@@ -491,7 +492,7 @@ def add_wasteland_event(count, chat_id):
                         else:
                             a[chat_id]['inventory'][i[0]] = int(i[1])
                 cur.execute("""Delete from wasteland where chat_id={} and who='{}'""".format(chat_id, who))
-
+    con.commit()
 
 def choice_event_id(event_list):
     res = []
@@ -768,9 +769,9 @@ def items(chat_id):
     markup = types.InlineKeyboardMarkup()
     item_1 = types.InlineKeyboardButton(text='', callback_data='item_')
     markup.add(types.InlineKeyboardButton(text='Бежииим!!!!!', callback_data='run'))
-    family_button = {'father': types.InlineKeyboardButton(
-        text=f'{items_how_many_things_are_left(chat_id, "father")} x Папа - 15',
-        callback_data='item_father'),
+    family_button = {'dad': types.InlineKeyboardButton(
+        text=f'{items_how_many_things_are_left(chat_id, "dad")} x Папа - 15',
+        callback_data='item_dad'),
         'mother': types.InlineKeyboardButton(
             text=f'{items_how_many_things_are_left(chat_id, "mother")} x Мама - 15',
             callback_data='item_mother'),
@@ -934,7 +935,7 @@ def callback(call):
                 bot.answer_callback_query(callback_query_id=call.id, text='Недостаточно места')
             else:
                 text = 'Мы положили в сумку: {}'
-                if item[1] in ['mother', 'father', 'brother', 'sister']:
+                if item[1] in ['mother', 'dad', 'brother', 'sister']:
                     if item_name not in family.get(chat_id, []):
                         text = 'Вы взяли с собой в бункер: {}'
                         family[chat_id] = family.get(chat_id, []) + [item_name]
