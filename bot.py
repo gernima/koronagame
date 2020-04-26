@@ -4,7 +4,7 @@ from telebot import types
 from threading import Thread
 import pymorphy2
 import sqlite3
-from random import choice, random, sample
+from random import choice, sample
 from event import events
 
 bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
@@ -24,7 +24,7 @@ wasteland_page = {}  # chat_id: num_page
 morph = pymorphy2.MorphAnalyzer().parse
 WEAPON_DAMAGE = {'obrez': 1}  # name: damage
 FOOD = {'dad': ('Папа', 'dad', 15, 1),  # (rus_name, en_name, weight, n)
-        'sister': ('Сестра', 'sister',15, 1),
+        'sister': ('Сестра', 'sister', 15, 1),
         'mother': ('Мама', 'mother', 15, 1),
         'brother': ('Брат', 'brother', 15, 1),
         'mask': ('маска', 'mask', 3, 1),
@@ -34,6 +34,16 @@ FOOD = {'dad': ('Папа', 'dad', 15, 1),  # (rus_name, en_name, weight, n)
         'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
         'water': ('вода', 'water', 2, 6, 50)}
 package = {}
+things = {'dad': ('Папа', 'dad', 15, 1),  # (rus_name, en_name, weight, n)
+        'sister': ('Сестра', 'sister', 15, 1),
+        'mother': ('Мама', 'mother', 15, 1),
+        'brother': ('Брат', 'brother', 15, 1),
+        'mask': ('маска', 'mask', 3, 1),
+        'medicinechest': ('аптечка', 'medicinechest', 3, 1),
+        'soap': ('мыло', 'soap', 3, 4),
+        'obrez': ('обрез', 'obrez', 50, 1),
+        'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
+        'water': ('вода', 'water', 2, 6, 50)}
 
 
 @bot.callback_query_handler(func=lambda call: 'bunker' in call.data and 'wasteland_return' not in call.data)
@@ -388,6 +398,7 @@ def bunker(message):
     bot.send_message(message.chat.id, f'Локация: Бункер\nДень {a[message.chat.id]["day"]}',
                      reply_markup=get_bunker_keyboard(message.chat.id))
 
+
 def bd_events(chat_id, event_id, message):
     tf = True
     res_items = a[chat_id]['inventory']
@@ -493,6 +504,7 @@ def add_wasteland_event(count, chat_id):
                             a[chat_id]['inventory'][i[0]] = int(i[1])
                 cur.execute("""Delete from wasteland where chat_id={} and who='{}'""".format(chat_id, who))
     con.commit()
+
 
 def choice_event_id(event_list):
     res = []
@@ -679,12 +691,6 @@ def get_data_from_bd(chat_id):
     a[chat_id]['brother'] = cur.execute(q.format('brother', 'saves', chat_id)).fetchone()[0]
     a[chat_id]['sister'] = cur.execute(q.format('sister', 'saves', chat_id)).fetchone()[0]
     a[chat_id]['day'] = cur.execute(q.format('day', 'saves', chat_id)).fetchone()[0]
-
-
-def bunker(message):
-    get_data_from_bd(message.chat.id)
-    bot.send_message(message.chat.id, f'Локация: Бункер\nДень {a[message.chat.id]["day"]}',
-                     reply_markup=get_bunker_keyboard(message.chat.id))
 
 
 # chat_ids = [int(x[0]) for x in cur.execute("""Select chat_id from saves""").fetchall()]
