@@ -8,7 +8,7 @@ from random import choice, sample
 from event import events
 
 bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
-print('start')
+
 a = {0: {'inventory': {}, 'name': 'a', 'mother': 0, 'dad': 0, 'brother': 0, 'sister': 0, 'day': 1,
          'dad_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕', 'weapon': ''},
          'mother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌', 'weapon': ''},
@@ -60,28 +60,35 @@ def bunker_logic(call):
         bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                               text='Люди в пустоши:',
                               reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
-    elif 'bunker_weapon' in call.data:
+    elif 'bunker_weapon_' in call.data:
         splited_data = call.data.split('_')
         who = splited_data[2]
         weapon = splited_data[3]
-        prev_weapon = cur.execute(f"""Select weapon from wasteland where chat_id={call.from_user.id} and who='{who}'""").fetchone()[0]
-        if prev_weapon != '' and prev_weapon:
-            if a[call.from_user.id]['inventory'][prev_weapon]:
-                a[call.from_user.id]['inventory'][prev_weapon] += 1
-            else:
-                a[call.from_user.id]['inventory'][prev_weapon] = 1
-        if a[call.from_user.id]['inventory'][weapon]:
-            a[call.from_user.id]['inventory'][weapon] -= 1
+        if weapon == 'none':
+            a[call.from_user.id]['inventory'][a[call.from_user.id][who + '_bd']['weapon']] += 1
+            a[call.from_user.id][who + '_bd']['weapon'] = ''
         else:
-            del a[call.from_user.id]['inventory'][weapon]
-        cur.execute(f"""UPDATE {who} SET weapon={weapon} where chat_id={call.from_user.id} and who={who}""")
+            prev_weapon = a[call.from_user.id][who + '_bd']['weapon']
+            if prev_weapon != '' and prev_weapon:
+                if a[call.from_user.id]['inventory'][prev_weapon]:
+                    a[call.from_user.id]['inventory'][prev_weapon] += 1
+                else:
+                    a[call.from_user.id]['inventory'][prev_weapon] = 1
+            if a[call.from_user.id]['inventory'][weapon] and a[call.from_user.id]['inventory'][weapon] - 1 > 0:
+                a[call.from_user.id]['inventory'][weapon] -= 1
+            else:
+                del a[call.from_user.id]['inventory'][weapon]
+            a[call.from_user.id][who + '_bd']['weapon'] = weapon
+        cur.execute(f"""UPDATE {who} SET weapon='{a[call.from_user.id][who + '_bd']['weapon']}' where chat_id={call.from_user.id}""")
         edit_message_for_family(call, who)
         con.commit()
     elif 'weapon' in call.data:
+        who = call.data.split('_')[3]
         weapons_menu = telebot.types.InlineKeyboardMarkup(row_width=3)
         weapons_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
+        weapons_menu.add(telebot.types.InlineKeyboardButton(text=f'Убрать оружие',
+                                                            callback_data=f'bunker_weapon_{who}_none'))
         butts = []
-        who = call.data.split('_')[2]
         for item in a[call.from_user.id]['inventory'].keys():
             if item in WEAPON_DAMAGE.keys():
                 butts.append(telebot.types.InlineKeyboardButton(text=f'{things[item][0]}-⚔{WEAPON_DAMAGE[item]}', callback_data=f'bunker_weapon_{who}_{item}'))
@@ -240,7 +247,6 @@ def wasteland_logic(call):
                               reply_markup=get_bunker_keyboard(call.from_user.id))
     else:
         splited_data = call.data.split('_')
-        data = splited_data[2:]
         chat_id = call.from_user.id
         if call.data == 'wasteland_return':
             bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
@@ -276,7 +282,7 @@ def wasteland_logic(call):
                 q = f"""Select text from wasteland where chat_id = {call.from_user.id} and who = '{who_data}'"""
                 print(wasteland_page, len([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')]))
                 try:
-                    if len([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')]) > wasteland_page[call.from_user.id] * 20:
+                    if len([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')]) > wasteland_page[call.from_user.id] * 10:
                         print(1)
                         wasteland_page[call.from_user.id] += 1
                         send_wasteland_logs(call, splited_data)
@@ -305,8 +311,8 @@ def send_wasteland_logs(call, splited_data):
     who = return_who_data(who_data)
     wasteland_page[call.from_user.id] = 0
     q = f"""Select text from wasteland where chat_id = {call.from_user.id} and who = '{who_data}'"""
-    n = wasteland_page[call.from_user.id] * 20
-    logs = '\n'.join([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')][n: n + 20])
+    n = wasteland_page[call.from_user.id] * 10
+    logs = '\n'.join([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')][n: n + 10])
     q = f"""Select is_return from wasteland where chat_id = {call.from_user.id} and who = '{who_data}'"""
     x = ''
     if con.execute(q).fetchone()[0]:
@@ -716,15 +722,18 @@ def edit_message_for_family(call, who=None):
             who = 'Сестра'
         elif call.data[len('bunker_family_'):] == 'brother':
             who = 'Брат'
-    who_bd = call.data[len('bunker_family_'):] + '_bd'
+        who_bd = call.data[len('bunker_family_'):] + '_bd'
+    else:
+        who_bd = who + '_bd'
+        who = return_who_data(who)
     family_menu = telebot.types.InlineKeyboardMarkup()
     family_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
     family_menu.add(telebot.types.InlineKeyboardButton(text='Отправить в пустошь',
                                                        callback_data=f"wasteland_{call.data[len('bunker_family_'):]}_go"))
     family_menu.add(telebot.types.InlineKeyboardButton(text='Кормить', callback_data='bunker_family_feed'))
-    family_menu.add(telebot.types.InlineKeyboardButton(text='Вооружить', callback_data=f'bunker_family_{call.data[len("bunker_family_"):]}_weapon'))
+    family_menu.add(telebot.types.InlineKeyboardButton(text='Вооружение', callback_data=f'bunker_family_weapon_{call.data[len("bunker_family_"):]}'))
     if a[call.from_user.id][who_bd]["weapon"]:
-        weapon = a[call.from_user.id][who_bd]["weapon"] + '-⚔' + str(WEAPON_DAMAGE[a[call.from_user.id][who_bd]["weapon"]])
+        weapon = things[a[call.from_user.id][who_bd]["weapon"]][0] + ' ⚔' + str(WEAPON_DAMAGE[a[call.from_user.id][who_bd]["weapon"]])
     else:
         weapon = 'ничего'
     bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
