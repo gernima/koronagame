@@ -1,2 +1,9 @@
-a = [1, 2, 3, 4, 5]
-print(a[0:3])
+def f1(n):
+    return n
+
+
+def f2(f):
+    print(f)
+
+
+f2(f1(1))
