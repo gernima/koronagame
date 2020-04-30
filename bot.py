@@ -387,44 +387,47 @@ def event_run(message):
     # event = choice(events_bd)
     markup = types.InlineKeyboardMarkup()
     package = set(list(a[message.chat.id]['inventory']))
-    if [i for i in ['mother', 'dad', 'brother', 'sister'] if a[chat_id][i] != 0]:
-        if event == 'пауки в бункере':
-            if 'medicinechest' in package:
-                markup.add(
-                    types.InlineKeyboardButton(text='аптечка', callback_data='event_spider_medicinechest'),
-                    types.InlineKeyboardButton(text='война с пауками', callback_data='event_spider_war')
-                        )
-                markup.add(types.InlineKeyboardButton(text='не обращать внимания', callback_data='event_spider_continue'))
-                bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id,
-                                 text='Это безумие! Мы постоянно находим пауков. Они в нашем '
-                                 'супе. Они в нашей воде. Мы клянемся, что некоторые из них продолжают возвращаться, и они'
-                                 ' становятся больше с каждым разом, когда мы их видим! Так продолжаться не может. Пришло '
-                                 'время вести войну с этими пауками!', reply_markup=markup)
-            else:
-                event_run(message)
-        elif event == 'доставка от правительства':
-            markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
-            item = choice(['water', 'medicinechest', 'cannedfood', 'soap'])
-            a[message.chat.id]['inventory'][item] = a[message.chat.id]['inventory'].get(item, 0) + 1
-            bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text=f'Вы получаете помощь от правительства: {FOOD[item][0]}', reply_markup=markup)
-        elif event == 'консервы просрочены':
-            if 'cannedfood' in package:
-                markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
-                a[message.chat.id]['inventory']['cannedfood'] -= 1
-                item_zero(message, 'cannedfood')
-                bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text='Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
-            else:
-                event_run(message)
-        else:
-            while True:
-                q = """Select choiced from events where event_id={}""".format(event)
-                if not cur.execute(q).fetchone()[0]:
-                    break
+    whos = [i for i in ['mother', 'dad', 'brother', 'sister'] if a[chat_id][i] != 0]
+    try:
+        if whos:
+            if event == 'пауки в бункере':
+                if 'medicinechest' in package:
+                    markup.add(
+                        types.InlineKeyboardButton(text='аптечка', callback_data='event_spider_medicinechest'),
+                        types.InlineKeyboardButton(text='война с пауками', callback_data='event_spider_war')
+                            )
+                    markup.add(types.InlineKeyboardButton(text='не обращать внимания', callback_data='event_spider_continue'))
+                    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id,
+                                     text='Это безумие! Мы постоянно находим пауков. Они в нашем '
+                                     'супе. Они в нашей воде. Мы клянемся, что некоторые из них продолжают возвращаться, и они'
+                                     ' становятся больше с каждым разом, когда мы их видим! Так продолжаться не может. Пришло '
+                                     'время вести войну с этими пауками!', reply_markup=markup)
                 else:
-                    event = choice(events_bd)
-            bd_events(message.chat.id, event, message)
-
+                    event_run(message)
+            elif event == 'доставка от правительства':
+                markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
+                item = choice(['water', 'medicinechest', 'cannedfood', 'soap'])
+                a[message.chat.id]['inventory'][item] = a[message.chat.id]['inventory'].get(item, 0) + 1
+                bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text=f'Вы получаете помощь от правительства: {FOOD[item][0]}', reply_markup=markup)
+            elif event == 'консервы просрочены':
+                if 'cannedfood' in package:
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
+                    a[message.chat.id]['inventory']['cannedfood'] -= 1
+                    item_zero(message, 'cannedfood')
+                    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text='Одна консерва оказалась просрочена, пришлось ее выкинуть', reply_markup=markup)
+                else:
+                    event_run(message)
+            else:
+                while True:
+                    q = """Select choiced from events where event_id={}""".format(event)
+                    if not cur.execute(q).fetchone()[0]:
+                        break
+                    else:
+                        event = choice(events_bd)
+                bd_events(message.chat.id, event, message)
+    except Exception as e:
+        print('event_err', e)
 
 
 def item_zero(message, item):
