@@ -945,7 +945,7 @@ def send_text(message):
     if message.text.lower() == '1':
         bunker(message)
     elif message.text == 'Помощь новичкам':
-        bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id,
+        bot.send_message(chat_id=message.chat.id,
                               text='Для старта введите /start, такис образом вы начнете новую игру. '
                                    'При старте вы прячетесь в бункер, но перед этим вы собираете все вам необходимые вещи, которые понадобятся вам в выживании в бункере.\n'
                                    'В бункере вы можете просмотреть информацию по каждому взятому члену семьи, нажав по члену семьи.'
