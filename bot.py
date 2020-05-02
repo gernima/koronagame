@@ -45,8 +45,8 @@ things = {'dad': ('Папа', 'dad', 15, 1),  # (rus_name, en_name, weight, n, +
         'soap': ('мыло', 'soap', 3, 4),
         'obrez': ('обрез', 'obrez', 50, 1),
         'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
-        'water': ('вода', 'water', 2, 6, 50),
-        'vaccine': ('вакцина', 'vaccine', 2, 6, 50)}
+        'water': ('вода', 'water', 2, 6, 15),
+        'vaccine': ('вакцина', 'vaccine', 2, 6, 15)}
 wasteland_return = types.InlineKeyboardMarkup()
 wasteland_return.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
 
@@ -159,6 +159,8 @@ def bunker_logic(call):
         else:
             if a[call.message.chat.id][name]['water'] <= 90 and a[call.from_user.id]["inventory"].get("water", 0) > 0:
                 a[call.message.chat.id][name]['water'] += 10
+                a[call.from_user.id]["inventory"]["water"] -= 1
+                item_zero(call.message, "water")
             else:
                 return
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
@@ -364,10 +366,10 @@ def water_and_canned(call, name_):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'),
                types.InlineKeyboardButton(
-                   text=f'{a[call.from_user.id]["inventory"].get("cannedfood", 0)} x Консервы + 50 сытости',
+                   text=f'{a[call.from_user.id]["inventory"].get("cannedfood", 0)} x Консервы + 15 сытости',
                    callback_data=f'bunker_food_cannedfood_{name_}'),
                types.InlineKeyboardButton(
-                   text=f'{a[call.from_user.id]["inventory"].get("water", 0)} x Вода + 50 вода',
+                   text=f'{a[call.from_user.id]["inventory"].get("water", 0)} x Вода + 15 вода',
                    callback_data=f'bunker_food_water_{name_}'))
     return markup
 
@@ -897,6 +899,7 @@ def time_cheker(call, chat_id):
             a[call.from_user.id] = a[0]
             if len(package.keys()) != 0:
                 a[call.from_user.id]['inventory'] = package[chat_id]
+            wasteland_page[call.from_user.id] = 0
             save_update_to_bd(call.from_user.id)
             for i in (package, weight_list):
                 if chat_id in i:
@@ -989,7 +992,7 @@ def callback(call):
                 cur.execute("""Delete from mother where chat_id={}""".format(chat_id))
                 cur.execute("""Delete from saves where chat_id={}""".format(chat_id))
                 cur.execute("""Delete from sister where chat_id={}""".format(chat_id))
-                print('Счетчик: ' + call.from_user.username)
+                # print('Счетчик: ' + call.from_user.username)
                 weight_list[chat_id] = 100
                 thread1 = Thread(target=time_cheker, args=(call, chat_id))
                 thread1.start()
