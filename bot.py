@@ -56,14 +56,13 @@ wasteland_return_from_inventory.add(types.InlineKeyboardButton('Назад', cal
 
 @bot.callback_query_handler(func=lambda call: 'bunker' in call.data and 'wasteland_return' not in call.data)
 def bunker_logic(call):
-    if call.data == 'bunker_family_dad':
+    if call.data == 'bunker_family_dad' or call.data == 'bunker_family_mother' or call.data == 'bunker_family_sister' or call.data == 'bunker_family_brother':
         edit_message_for_family(call)
-    elif call.data == 'bunker_family_mother':
-        edit_message_for_family(call)
-    elif call.data == 'bunker_family_sister':
-        edit_message_for_family(call)
-    elif call.data == 'bunker_family_brother':
-        edit_message_for_family(call)
+    elif 'respawn' in call.data:
+        if respawn(call):
+            bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                                  text=f'Локация: Бункер\nДень {a[call.from_user.id]["day"]}',
+                                  reply_markup=get_bunker_keyboard(call.from_user.id))
     elif call.data == 'bunker_wasteland':
         bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                               text='Люди в пустоши:',
@@ -73,7 +72,10 @@ def bunker_logic(call):
         who = splited_data[2]
         weapon = splited_data[3]
         if weapon == 'none':
-            a[call.from_user.id]['inventory'][a[call.from_user.id][who + '_bd']['weapon']] += 1
+            if a[call.from_user.id][who + '_bd']['weapon'] in a[call.from_user.id]['inventory']:
+                a[call.from_user.id]['inventory'][a[call.from_user.id][who + '_bd']['weapon']] += 1
+            else:
+                a[call.from_user.id]['inventory'][a[call.from_user.id][who + '_bd']['weapon']] = 1
             a[call.from_user.id][who + '_bd']['weapon'] = ''
         else:
             prev_weapon = a[call.from_user.id][who + '_bd']['weapon']
@@ -172,6 +174,36 @@ def bunker_logic(call):
                               reply_markup=water_and_canned(call, name_))
     elif call.data == 'bunker_journal':
         event_run(call.message)
+    else:
+        pass
+
+
+def respawn(call, location='bunker'):
+    if location == 'bunker':
+        if 'vaccine' in a[call.from_user.id]['inventory']:
+            if a[call.from_user.id]['inventory']['vaccine'] > 1:
+                a[call.from_user.id]['inventory']['vaccine'] -= 1
+            else:
+                del a[call.from_user.id]['inventory']['vaccine']
+            a[call.from_user.id][call.data.split('_')[2] + '_bd']['hp'] = 50
+            a[call.from_user.id][call.data.split('_')[2] + '_bd']['immunity'] = 50
+        else:
+            bot.answer_callback_query(callback_query_id=call.id, text='Нет вакцины!')
+        return True
+    elif location == 'wasteland':
+        who_items = get_wasteland_items(call.from_user.id)
+        if 'vaccine' in who_items:
+            if who_items['vaccine'] > 1:
+                who_items['vaccine'] -= 1
+            else:
+                del who_items['vaccine']
+            a[call.from_user.id][call.data.split('_')[2] + '_bd']['hp'] = 50
+            a[call.from_user.id][call.data.split('_')[2] + '_bd']['immunity'] = 50
+            res_items = ';'.join([f'{x}:{who_items[x]}' for x in who_items.keys()])
+            cur.execute(f"""UPDATE wasteland SET items=? where chat_id=? and who=?""", (res_items, call.from_user.id, call.data.split('_')[2]))
+        else:
+            bot.answer_callback_query(callback_query_id=call.id, text='Нет вакцины!')
+    return False
 
 
 def send_inventory(call, keyboard, is_wasteland_inv=False, who=''):
@@ -248,16 +280,39 @@ def event_logic(call):
 
 
 def minus_char(chat_id, who, x):
-    if x[0]:
-        if int(x[0]) > 0:
-            a[chat_id][who + '_bd']['hp'] += max(a[chat_id][who + '_bd']['hp'] + int(x[0]), 100)
-        else:
-            a[chat_id][who + '_bd']['hp'] += max(a[chat_id][who + '_bd']['hp'] - int(x[0]), 0)
     if x[1]:
         if int(x[1]) > 0:
-            a[chat_id][who + '_bd']['immunity'] += min(a[chat_id][who + '_bd']['immunity'] + int(x[1]), 100)
+            a[chat_id][who + '_bd']['immunity'] = min(a[chat_id][who + '_bd']['immunity'] + int(x[1]), 100)
         else:
-            a[chat_id][who + '_bd']['immunity'] += min(a[chat_id][who + '_bd']['immunity'] - int(x[1]), 0)
+            a[chat_id][who + '_bd']['immunity'] = max(a[chat_id][who + '_bd']['immunity'] - int(x[1]), 0)
+    if x[0]:
+        hp_minus = ((100 - a[chat_id][who + '_bd']['immunity']) * 0.1 + 1) * int(x[0])
+        if int(x[0]) > 0:
+            a[chat_id][who + '_bd']['hp'] = min(hp_minus, 100)
+        else:
+            a[chat_id][who + '_bd']['hp'] = max(hp_minus, 0)
+
+
+def check_death(chat_id, who):
+    if who in ['dad_bd', 'mother_bd', 'sister_bd', 'brother_bd']:
+        if a[chat_id][who]['hp'] > 0:
+            return False
+        return True
+    elif who in ['dad', 'mother', 'sister', 'brother']:
+        if a[chat_id][who + '_bd']['hp'] > 0:
+            return False
+        return True
+    else:
+        return False
+
+
+def bunker_send_who_died(call, who):
+    died = types.InlineKeyboardMarkup()
+    died.add(types.InlineKeyboardButton('Да', callback_data=f'bunker_family_{who.split("_")[0]}_respawn'),
+             types.InlineKeyboardButton('Позже', callback_data='bunker_family_return'))
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                          text=f'Мертв! Желаете воскресить? Внимание воскрешение требует вакцину и время для воскрешения не ограничено! После воскрешения пользователь будет ослаблен!',
+                          reply_markup=died)
 
 
 def events_debuff(chat_id, event):
@@ -295,21 +350,30 @@ def wasteland_logic(call):
             send_inventory(call, wasteland_return_from_inventory, True, call.data.split('_')[2])
         elif 'wasteland_return_' in call.data:
             splited_data = call.data.split('_')
-            if splited_data[2] == 'bunker':
+            if splited_data[3] == 'bunker':
                 day = cur.execute(
                     """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id,
-                                                                                         splited_data[3])).fetchone()[0]
+                                                                                         splited_data[2])).fetchone()[0]
                 cur.execute("""UPDATE wasteland SET is_return=1, day_return=? where chat_id=? and who=?""",
-                            (day - 1, chat_id, splited_data[3]))
+                            (day - 1, chat_id, splited_data[2]))
             else:
                 day = 0
                 cur.execute("""UPDATE wasteland SET is_return=0, day_return=? where chat_id=? and who=?""",
-                            (day, chat_id, splited_data[3]))
+                            (day, chat_id, splited_data[2]))
             con.commit()
             bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
                                   text='Люди в пустоши:',
                                   reply_markup=get_wasteland_mans_keyboard(call.from_user.id))
+        elif 'respawn' in call.data and 'family' not in call.data:
+            wast_died = types.InlineKeyboardMarkup()
+            wast_died.add(types.InlineKeyboardButton('Да', callback_data=f'wasteland_family_{call.data.split("_")[2]}_respawn'),
+                     types.InlineKeyboardButton('Позже', callback_data=f'wasteland_family_{call.data.split("_")[2]}'))
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+                                  text=f'Мертв! Желаете воскресить? Внимание воскрешение требует вакцину и время для воскрешения не ограничено! После воскрешения пользователь будет ослаблен!',
+                                  reply_markup=wast_died)
         elif 'family' in call.data:
+            if 'respawn' in call.data:
+                is_resp = respawn(call, location='wasteland')
             try:
                 send_wasteland_logs(call, splited_data)
             except:
@@ -326,6 +390,8 @@ def wasteland_logic(call):
                 if len([x.replace('\n', '\n') for x in con.execute(q).fetchone()[0].split(';')]) > wasteland_page[call.from_user.id] * slice_page + slice_page:
                     wasteland_page[call.from_user.id] += 1
                     send_wasteland_logs(call, splited_data)
+        elif call.data == 'wasteland_lived':
+            bot.answer_callback_query(callback_query_id=call.id, text='Все в порядке')
 
 
 def return_who_data(who_data):
@@ -389,7 +455,7 @@ def event_run(message):
     # event = choice(events_bd)
     markup = types.InlineKeyboardMarkup()
     package = set(list(a[message.chat.id]['inventory']))
-    whos = [i for i in ['mother', 'dad', 'brother', 'sister'] if a[chat_id][i] != 0]
+    whos = [i for i in ['mother', 'dad', 'brother', 'sister'] if a[message.chat.id][i] != 0]
     try:
         if whos:
             if event == 'пауки в бункере':
@@ -503,6 +569,12 @@ def get_wasteland_mans_keyboard(chat_id, arrows=False, who_arrow=''):
     if arrows:
         keyboard.add(telebot.types.InlineKeyboardButton(text=f'Пред.Стр', callback_data=f'wasteland_prev_{who_arrow}_page'),
                      telebot.types.InlineKeyboardButton(text=f'След.Стр', callback_data=f'wasteland_next_{who_arrow}_page'))
+    if check_death(chat_id, who_arrow):
+        keyboard.add(telebot.types.InlineKeyboardButton(text=f'Мертв! Воскрестить?',
+                                                        callback_data=f'wasteland_respawn_{who_arrow}'))
+    elif arrows:
+        keyboard.add(telebot.types.InlineKeyboardButton(text=f'Жив',
+                                                        callback_data=f'wasteland_lived'))
     keyboard.add(telebot.types.InlineKeyboardButton(text=f'След.День', callback_data='bunker_next_day_wasteland'))
     for i in who:
         i = i[0]
@@ -514,25 +586,25 @@ def get_wasteland_mans_keyboard(chat_id, arrows=False, who_arrow=''):
                                                         callback_data=f'wasteland_inventory_{i}'))
         if cur.execute(q).fetchone()[0]:
             butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в пустошь',
-                                                            callback_data=f'wasteland_return_wasteland_{i}'))
+                                                            callback_data=f'wasteland_return_{i}_wasteland'))
         else:
             butts.append(telebot.types.InlineKeyboardButton(text=f'Вернуть в бункер',
-                                                            callback_data=f'wasteland_return_bunker_{i}'))
-
+                                                            callback_data=f'wasteland_return_{i}_bunker'))
     keyboard.add(*butts)
     return keyboard
 
 
 def add_wasteland_event(count, chat_id):
     who_list = cur.execute("""Select who from wasteland where chat_id={}""".format(chat_id)).fetchall()
+    event_list = [x[0] for x in cur.execute("""Select event_id from wasteland_events""").fetchall()]
     for who in who_list:
         who = who[0]
-        event_list = [x[0] for x in cur.execute("""Select event_id from wasteland_events""").fetchall()]
-        event_list = sample(choice_event_id(event_list), k=count)
-        for event_id in event_list:
-            wasteland_event_system(chat_id, who, cur.execute(
-                """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[
-                0], event_id)
+        if not check_death(chat_id, who):
+            event_list = sample(choice_event_id(event_list), k=count)
+            for event_id in event_list:
+                wasteland_event_system(chat_id, who, cur.execute(
+                    """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[
+                    0], event_id)
         cur.execute("""UPDATE wasteland SET day=? where chat_id=? and who=?""",
                     (cur.execute(
                         """Select day from wasteland where chat_id={} and who='{}'""".format(chat_id, who)).fetchone()[
@@ -582,12 +654,17 @@ def choice_event_id(event_list):
     return res
 
 
-def wasteland_event_system(chat_id, who, day, event_id):
+def get_wasteland_items(chat_id):
     who_items = cur.execute("""Select items from wasteland where chat_id={}""".format(chat_id)).fetchone()[0].split(';')
     res_items = {}
     if len(who_items) > 0 and who_items[0].strip() != '':
         for i in [x.split(':') for x in who_items]:
             res_items[i[0]] = int(i[1])
+    return res_items
+
+
+def wasteland_event_system(chat_id, who, day, event_id):
+    res_items = get_wasteland_items(chat_id)
     tf = True
     if res_items:
         res_items, tf = event_items(event_id, res_items, tf)
@@ -766,24 +843,27 @@ def edit_message_for_family(call, who=None):
     else:
         who_bd = who + '_bd'
         who = return_who_data(who)
-    family_menu = telebot.types.InlineKeyboardMarkup()
-    family_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
-    family_menu.add(telebot.types.InlineKeyboardButton(text='Отправить в пустошь',
-                                                       callback_data=f"wasteland_{call.data[len('bunker_family_'):]}_go"))
-    family_menu.add(telebot.types.InlineKeyboardButton(text='Кормить', callback_data='bunker_family_feed'))
-    family_menu.add(telebot.types.InlineKeyboardButton(text='Вооружение', callback_data=f'bunker_family_weapon_{call.data[len("bunker_family_"):]}'))
-    if a[call.from_user.id][who_bd]["weapon"]:
-        weapon = things[a[call.from_user.id][who_bd]["weapon"]][0] + ' ⚔' + str(WEAPON_DAMAGE[a[call.from_user.id][who_bd]["weapon"]])
+    if check_death(call.from_user.id, who_bd):
+        bunker_send_who_died(call, who_bd)
     else:
-        weapon = 'ничего'
-    bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
-                          text=f'{who} {a[call.from_user.id][who_bd]["emoji"]}'
-                               f'\nЗдоровье: {a[call.from_user.id][who_bd]["hp"]}'
-                               f'\nСытость: {a[call.from_user.id][who_bd]["hungry"]}'
-                               f'\nЖажда: {a[call.from_user.id][who_bd]["water"]}'
-                               f'\nИммунитет: {a[call.from_user.id][who_bd]["immunity"]}'
-                               f'\nВооружение: {weapon}',
-                          reply_markup=family_menu)
+        family_menu = telebot.types.InlineKeyboardMarkup()
+        family_menu.add(telebot.types.InlineKeyboardButton(text='Назад', callback_data='bunker_family_return'))
+        family_menu.add(telebot.types.InlineKeyboardButton(text='Отправить в пустошь',
+                                                           callback_data=f"wasteland_{call.data[len('bunker_family_'):]}_go"))
+        family_menu.add(telebot.types.InlineKeyboardButton(text='Кормить', callback_data='bunker_family_feed'))
+        family_menu.add(telebot.types.InlineKeyboardButton(text='Вооружение', callback_data=f'bunker_family_weapon_{call.data[len("bunker_family_"):]}'))
+        if a[call.from_user.id][who_bd]["weapon"]:
+            weapon = things[a[call.from_user.id][who_bd]["weapon"]][0] + ' ⚔' + str(WEAPON_DAMAGE[a[call.from_user.id][who_bd]["weapon"]])
+        else:
+            weapon = 'ничего'
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text=f'{who} {a[call.from_user.id][who_bd]["emoji"]}'
+                                   f'\nЗдоровье: {a[call.from_user.id][who_bd]["hp"]}'
+                                   f'\nСытость: {a[call.from_user.id][who_bd]["hungry"]}'
+                                   f'\nЖажда: {a[call.from_user.id][who_bd]["water"]}'
+                                   f'\nИммунитет: {a[call.from_user.id][who_bd]["immunity"]}'
+                                   f'\nВооружение: {weapon}',
+                              reply_markup=family_menu)
 
 
 def save_update_to_bd(chat_id):
@@ -794,10 +874,7 @@ def save_update_to_bd(chat_id):
             (chat_id, inventory, a[chat_id]['name'], a[chat_id]['mother'], a[chat_id]['dad'],
              a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], chat_id))
     else:
-        a[chat_id]['dad'] = 0
-        a[chat_id]['sister'] = 0
-        a[chat_id]['brother'] = 0
-        a[chat_id]['mother'] = 0
+        a[chat_id] = a[0]
         if family.get(chat_id, False):
             if 'Папа' in family[chat_id]:
                 a[chat_id]['dad'] = 1
@@ -960,6 +1037,7 @@ def send_text(message):
                                    'Отправив человека в пустошь он появится в пустоши, нажав на пустошь вы сможете увидеть что сделали ваши люди в пустоши, нажав на соответствующего человека. Вы заметите, что добавились кнопки переключения между страницами, нажав на них вы просматриваете следующие или предыдущие ивенты пустоши, которые произошли с вашим человекоа.'
                                    'Рядом с человеком есть кнопка инвентарь, в котором вы увидете инвентарь. Если вы хотите вернуть человека в бункер, то нажмите на "Вернуть в бункер", если хотите вернуть в пустошь, то "Вернуть в пустошь"',
                          reply_markup=good)
+    exit_prog_system_exit()
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -1033,9 +1111,28 @@ def callback(call):
 
 chat_ids = [int(x[0]) for x in cur.execute("""Select chat_id from saves""").fetchall()]
 if chat_ids:
-    for chat_id in chat_ids:
-        wasteland_page[chat_id] = 0
-        get_data_from_bd(chat_id)
+    for i in chat_ids:
+        wasteland_page[i] = 0
+        get_data_from_bd(i)
 
 
-bot.polling()
+def exit_prog():
+    print('save crash')
+    chat_ids = [int(x[0]) for x in cur.execute("""Select chat_id from saves""").fetchall()]
+    if chat_ids:
+        for i in chat_ids:
+            save_update_to_bd(i)
+
+
+def exit_prog_system_exit():
+    if SystemExit(-1) or SystemExit(0):
+        print('save exit')
+        exit_prog()
+
+
+try:
+    bot.polling()
+except Exception as e:
+    print(e)
+    exit_prog()
+
