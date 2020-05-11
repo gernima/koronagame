@@ -748,7 +748,10 @@ def callback(call):
     elif name_type == 'admin':
         command = name.split('_')[1]
         if command == 'save':
-            
+            chat_ids = [int(x[0]) for x in cur.execute("""Select chat_id from saves""").fetchall()]
+            if chat_ids:
+                for i in chat_ids:
+                    save_update_to_bd(i)
 
 try:
     bot.polling()
