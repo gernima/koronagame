@@ -1138,7 +1138,7 @@ def start_message(message):
                          reply_markup=murkup)
     elif message.text == '/admin':
         print(message.chat.id)
-        if message.chat.id in [691537375]:
+        if message.chat.id in [691537375, 876274769]:
             markup = types.ReplyKeyboardMarkup(True)
             markup.add(types.KeyboardButton('Админка'))
             bot.send_message(message.chat.id, 'Админка', reply_markup=markup)
