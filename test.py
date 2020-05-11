@@ -1,3 +1,3 @@
-while True:
-    a = int(input('   :'))
-    print(1 / 5 * a ** 5 - a ** 2)
+from sys import stdin
+print(stdin.read().split())
+print(sum(stdin.read().split()))

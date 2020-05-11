@@ -22,16 +22,16 @@ family = {}
 user_list = []
 weight_list = {}
 morph = pymorphy2.MorphAnalyzer().parse
-FOOD = {'dad': ('Папа', 'dad', 15, 1),
-        'sister': ('Сестра', 'sister',15, 1),
-        'mother': ('Мама', 'mother', 15, 1),
-        'brother': ('Брат', 'brother', 15, 1),
-        'mask': ('маска', 'mask', 3, 1),
-        'medicinechest': ('аптечка', 'medicinechest', 3, 1),
-        'soap': ('мыло', 'soap', 3, 4),
-        'obrez': ('обрез', 'obrez', 50, 1, 1),
-        'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
-        'water': ('вода', 'water', 2, 6, 50)}
+FOOD = {'dad': ('Папа', 15, 1),
+        'sister': ('Сестра', 15, 1),
+        'mother': ('Мама', 15, 1),
+        'brother': ('Брат', 15, 1),
+        'mask': ('маска', 3, 1),
+        'medicinechest': ('аптечка', 3, 1),
+        'soap': ('мыло', 3, 4),
+        'obrez': ('обрез', 50, 1, 1),
+        'cannedfood': ('консервы', 3, 6, 50),
+        'water': ('вода', 2, 6, 50)}
 package = {}
 
 
@@ -539,7 +539,7 @@ def save_update_to_bd(chat_id):
 
 
 def items_how_many_things_are_left(chat_id, item):
-    return FOOD[item][3] - package.get(chat_id, {}).get(FOOD[item][1], 0)
+    return FOOD[item][2] - package.get(chat_id, {}).get(item, 0)
 
 
 def items(chat_id):
@@ -559,13 +559,12 @@ def items(chat_id):
         (text=f'{items_how_many_things_are_left(chat_id, "sister")} x Дочь - 15',
          callback_data='item_sister'), }
     item_button = [types.InlineKeyboardButton(
-            text=f'{items_how_many_things_are_left(chat_id, key)} x {value[0]} - {value[2]}',
+            text=f'{items_how_many_things_are_left(chat_id, key)} x {value[0]} - {value[1]}',
             callback_data=f'item_{key}')
-        for key, value in FOOD.items() if package.get(chat_id, {}).get(value[1], 0) != value[3]
-                                          and value[1] not in family_button.keys()]
+        for key, value in FOOD.items() if package.get(chat_id, {}).get(key, 0) != value[2]
+                                          and key not in family_button.keys()]
     button = [family_button[i] for i in
-              filter(lambda x: FOOD[x][0] not in family.get(chat_id, []), family_button)] + \
-             item_button
+            filter(lambda x: FOOD[x][0] not in family.get(chat_id, []), family_button)] + item_button
     for i in range(0, len(button), 2):
         markup.add(*button[i:i + 2])
     return markup
@@ -610,14 +609,7 @@ def time_cheker(call, chat_id):
                 enumerate(family.get(chat_id, ['Никого, но как же так?)']))))
             bot.edit_message_text(chat_id=sms.chat.id, message_id=sms.message_id,
                                   text='Время закончилось' if second == 0 else 'Место закончилось')
-            markup = types.ReplyKeyboardMarkup(True)
-            markup.add(
-                types.InlineKeyboardButton('Донат'),
-                types.InlineKeyboardButton('Поддержка'),
-                types.InlineKeyboardButton('Помощь новичкам')
-            )
-            bot.send_message(call.message.chat.id, 'Пора в бункер', reply_markup=markup)
-
+            bot.send_message(call.message.chat.id, 'Пора в бункер')
             a[call.from_user.id] = a[0]
             if len(package.keys()) != 0:
                 a[call.from_user.id]['inventory'] = package[chat_id]
@@ -630,7 +622,7 @@ def time_cheker(call, chat_id):
             return
 
 
-@bot.message_handler(commands=['start', 'new_game'])
+@bot.message_handler(commands=['start', 'new_game', 'admin'])
 def start_message(message):
     if message.text == '/start':
         if message.from_user.username not in user_list:
@@ -638,6 +630,14 @@ def start_message(message):
             if not laste_name:
                 laste_name = ''
             name = message.from_user.first_name + ' ' + laste_name
+            markup_2 = types.ReplyKeyboardMarkup(True)
+            markup_2.add(
+                types.InlineKeyboardButton('Донат'),
+                types.InlineKeyboardButton('Поддержка'),
+                types.InlineKeyboardButton('Помощь новичкам'))
+            if message.chat.id in [691537375]:
+                markup_2.add(types.KeyboardButton('Админка'))
+            bot.send_message(message.chat.id, f'Привет, {name}', reply_markup=markup_2)
             murkup = types.InlineKeyboardMarkup(row_width=2)
             item_1 = types.InlineKeyboardButton('Да', callback_data='play_yes')
             item_2 = types.InlineKeyboardButton('Нет', callback_data='play_no')
@@ -645,7 +645,7 @@ def start_message(message):
             if message.chat.id not in a.keys():
                 a[message.chat.id] = a[0]
             a[message.chat.id]['name'] = name.strip()
-            bot.send_message(message.chat.id, '{}, ты выжил?\nРешишься сыграть в игру?'.format(name),
+            bot.send_message(message.chat.id, 'Ты выжил?\nРешишься сыграть в игру?',
                              reply_markup=murkup)
             user_list.append(message.from_user.username)
             print("Список пользователей", user_list)
@@ -658,12 +658,23 @@ def start_message(message):
         murkup.add(item_1, item_2)
         bot.send_message(message.chat.id, 'Ты точно хочешь начать все с начала?',
                          reply_markup=murkup)
+    elif message.text == '/admin':
+        print(message.chat.id)
+        if message.chat.id in [691537375]:
+            markup = types.ReplyKeyboardMarkup(True)
+            markup.add(types.KeyboardButton('Админка'))
+            bot.send_message(message.chat.id, 'Админка', reply_markup=markup)
 
 
 @bot.message_handler(content_types=['text'])
 def send_text(message):
     if message.text.lower() == '1':
         bunker(message)
+    elif message.text == 'Админка':
+        murkup = types.InlineKeyboardMarkup()
+        murkup.add(
+            types.InlineKeyboardButton('Сохраниться', callback_data='admin_save')
+        )
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -704,15 +715,16 @@ def callback(call):
         elif type == 'continue':
             pass
     elif name_type == 'item':
-        item = FOOD[name.split('_')[1]]
-        item_weight = item[2]
-        item_name = item[0]
+        item = name.split('_')[1]
+        item_info = FOOD[item]
+        item_weight = item_info[1]
+        item_name = item_info[0]
         if weight_list[chat_id] != 0:
             if weight_list[chat_id] - item_weight < 0:
                 bot.answer_callback_query(callback_query_id=call.id, text='Недостаточно места')
             else:
                 text = 'Мы положили в сумку: {}'
-                if item[1] in ['mother', 'dad', 'brother', 'sister']:
+                if item in ['mother', 'dad', 'brother', 'sister']:
                     if item_name not in family.get(chat_id, []):
                         text = 'Вы взяли с собой в бункер: {}'
                         family[chat_id] = family.get(chat_id, []) + [item_name]
@@ -724,8 +736,8 @@ def callback(call):
                                                   text='Вы уже взяли этого члена семьи')
                 else:
                     package[chat_id] = package.get(chat_id, {})
-                    if package[chat_id].get(item[1], 0) != item[3]:
-                        package[chat_id][item[1]] = package[chat_id].get(item[1], 0) + 1
+                    if package[chat_id].get(item, 0) != item_info[2]:
+                        package[chat_id][item] = package[chat_id].get(item, 0) + 1
                         weight_list[chat_id] -= item_weight
                         bot.answer_callback_query(callback_query_id=call.id,
                                                   text=text.format(
@@ -733,7 +745,10 @@ def callback(call):
     elif name_type == 'run':
         print(chat_id, 'убежал')
         weight_list[chat_id] = 0
-
+    elif name_type == 'admin':
+        command = name.split('_')[1]
+        if command == 'save':
+            
 
 try:
     bot.polling()
