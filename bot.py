@@ -10,7 +10,7 @@ from event import events
 print('start')
 bot = telebot.TeleBot('1077053623:AAE8yg9jrRas7h7mTgKaNQAjOTeIsgwJHGI')
 lock = Lock()
-a = {0: {'inventory': {}, 'name': 'a', 'mother': 0, 'dad': 0, 'brother': 0, 'sister': 0, 'day': 1,
+a = {0: {'inventory': {}, 'name': 'a', 'mother': 0, 'dad': 0, 'brother': 0, 'sister': 0, 'day': 1, 'place': 0, 'weight': 200,
          'dad_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😕', 'weapon': ''},
          'mother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '😌', 'weapon': ''},
          'brother_bd': {'hp': 50, 'hungry': 50, 'water': 50, 'immunity': 50, 'emoji': '🤨', 'weapon': ''},
@@ -34,24 +34,105 @@ FOOD = {'dad': ('Папа', 'dad', 15, 1),  # (rus_name, en_name, weight, n)
         'soap': ('мыло', 'soap', 3, 4),
         'obrez': ('обрез', 'obrez', 50, 1),
         'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
-        'water': ('вода', 'water', 2, 6, 50)}
+        'water': ('вода', 'water', 2, 6, 50),
+        'recipe_sticks': ('Рецепт деревянных палок', 'recipe_sticks', 1, 1),
+        'woodboards': ('Доски', 'woodboards', 3, 3)}
 package = {}
-things = {'dad': ('Папа', 'dad', 15, 1),  # (rus_name, en_name, weight, n, +char)
-        'sister': ('Сестра', 'sister', 15, 1),
-        'mother': ('Мама', 'mother', 15, 1),
-        'brother': ('Брат', 'brother', 15, 1),
-        'mask': ('маска', 'mask', 3, 1),
-        'medicinechest': ('аптечка', 'medicinechest', 3, 1),
-        'soap': ('мыло', 'soap', 3, 4),
-        'obrez': ('обрез', 'obrez', 50, 1),
-        'cannedfood': ('консервы', 'cannedfood', 3, 6, 50),
-        'water': ('вода', 'water', 2, 6, 15),
-        'vaccine': ('вакцина', 'vaccine', 2, 6, 15)}
+things = {'dad': ('Папа', 15),  # (rus_name, weight, +char)
+        'sister': ('Сестра', 15),
+        'mother': ('Мама', 15),
+        'brother': ('Брат', 15),
+        'mask': ('маска', 3),
+        'medicinechest': ('аптечка', 3),
+        'soap': ('мыло', 3),
+        'obrez': ('обрез', 50),
+        'cannedfood': ('консервы', 3, 50),
+        'water': ('вода', 2, 15),
+        'vaccine': ('вакцина', 2),
+        'sticks': ('палки', 1),
+        'woodboards': ('доски', 5)}
 wasteland_return = types.InlineKeyboardMarkup()
 wasteland_return.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return'))
 
 wasteland_return_from_inventory = types.InlineKeyboardMarkup()
 wasteland_return_from_inventory.add(types.InlineKeyboardButton('Назад', callback_data='wasteland_return_from_inv'))
+
+recipe_return = types.InlineKeyboardMarkup()
+recipe_return.add(types.InlineKeyboardButton('Назад', callback_data='recipe_return'))
+
+
+@bot.callback_query_handler(func=lambda call: 'recipe' in call.data)
+def recipe_logic(call):
+    if 'return' in call.data:
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text='Доступные рецепты крафтов:',
+                              reply_markup=get_craft_keyboard(call.from_user.id))
+    elif 'craft' in call.data:
+        x = cur.execute(f"""Select input, output from recipes where recipe='{call.data.split('_')[1]}'""").fetchone()
+        minus, plus = x[0], x[1]
+        print(x, minus, plus, a[call.from_user.id]['inventory'], call.data)
+        tf = True
+        if minus:
+            if minus and minus != '' and minus is not None:
+                _minus = minus.split(';')
+                if len(_minus) > 0 and _minus[0].strip() != '' and _minus[0] != 'None':
+                    for i in [x.split(':') for x in _minus]:
+                        if i[0] in a[call.from_user.id]['inventory'].keys():
+                            if a[call.from_user.id]['inventory'][i[0]] - int(i[1]) < 0:
+                                tf = False
+                                break
+                        else:
+                            tf = False
+                            break
+        for i in [x.split(':') for x in plus.split(';')]:
+            if a[call.from_user.id]['weight'] - (things[i[0]][1] * int(i[1])) < 0:
+                tf = False
+        if tf:
+            minus = minus.split(';')
+            if len(minus) > 0 and minus[0].strip() != '' and minus[0] != 'None':
+                for i in [x.split(':') for x in minus]:
+                    if a[call.from_user.id]['inventory'][i[0]] - int(i[1]) != 0:
+                        a[call.from_user.id]['inventory'][i[0]] -= int(i[1])
+                    else:
+                        del a[call.from_user.id]['inventory'][i[0]]
+                    a[call.from_user.id]['weight'] += (things[i[0]][1] * int(i[1]))
+            plus = plus.split(';')
+            if len(plus) > 0 and plus[0].strip() != '' and plus[0] != 'None':
+                for i in [x.split(':') for x in plus]:
+                    if i[0] in a[call.from_user.id]['inventory']:
+                        a[call.from_user.id]['inventory'][i[0]] += int(i[1])
+                    else:
+                        a[call.from_user.id]['inventory'][i[0]] = int(i[1])
+                    a[call.from_user.id]['weight'] -= (things[i[0]][1] * int(i[1]))
+
+        else:
+            bot.answer_callback_query(callback_query_id=call.id, text='Отсутствуют необходимые материалы')
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text='Loading...')
+        send_recipe(call)
+    else:
+        send_recipe(call)
+
+
+def send_recipe(call):
+    x = cur.execute(f"""Select name, des, input, output from recipes where recipe='{call.data.split('_')[1]}'""").fetchone()
+    name, des, minus, plus = x[0], x[1], x[2], x[3]
+    text = []
+    for i in minus.split(';'):
+        item = i.split(':')
+        inv = 0
+        if item[0] in a[call.from_user.id]['inventory'].keys():
+            inv = a[call.from_user.id]['inventory'][item[0]]
+        if inv >= int(item[1]):
+            text.append(f"{things[item[0]][0]} {inv}/{item[1]}✅")
+        else:
+            text.append(f"{things[item[0]][0]} {inv}/{item[1]}❌")
+    recipe_choice = types.InlineKeyboardMarkup()
+    recipe_choice.add(types.InlineKeyboardButton('Создать', callback_data=f'recipe_{call.data.split("_")[1]}_craft'),
+                      types.InlineKeyboardButton('Назад', callback_data='recipe_return'))
+    bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                          text=f'{name}\n\n{des}\n{"".join(text)}',
+                          reply_markup=recipe_choice)
 
 
 @bot.callback_query_handler(func=lambda call: 'bunker' in call.data and 'wasteland_return' not in call.data)
@@ -174,8 +255,25 @@ def bunker_logic(call):
                               reply_markup=water_and_canned(call, name_))
     elif call.data == 'bunker_journal':
         event_run(call.message)
+    elif call.data == 'bunker_craft':
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text='Доступные рецепты крафтов:',
+                              reply_markup=get_craft_keyboard(call.from_user.id))
+    elif call.data == 'bunker_build':
+        bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
+                              text='В разработке(',
+                              reply_markup=wasteland_return)
     else:
         pass
+
+
+def get_craft_keyboard(chat_id):
+    keyboard = types.InlineKeyboardMarkup()
+    keyboard.add(types.InlineKeyboardButton('Назад', callback_data='bunker_family_return'))
+    for item in a[chat_id]['inventory'].keys():
+        if 'recipe' in item:
+            keyboard.add(telebot.types.InlineKeyboardButton(text=f'{things[item.split("_")[1]][0]}', callback_data=f'recipe_{item.split("_")[1]}'))
+    return keyboard
 
 
 def respawn(call, location='bunker'):
@@ -207,6 +305,7 @@ def respawn(call, location='bunker'):
 
 
 def send_inventory(call, keyboard, is_wasteland_inv=False, who=''):
+    text = ''
     if is_wasteland_inv:
         bd_inv = cur.execute("""Select items from wasteland where who='{}' and chat_id={}""".format(who, call.from_user.id)).fetchone()[0].split(';')
         inv = {}
@@ -216,11 +315,12 @@ def send_inventory(call, keyboard, is_wasteland_inv=False, who=''):
         inv_items = "\n".join([f"{things[x][0]}: {inv[x]}" for x in
                                inv.keys()])
     else:
-        inv_items = "\n".join([f"{things[x][0]}: {a[call.from_user.id]['inventory'][x]}" for x in a[call.from_user.id]["inventory"].keys()])
+        text = f'Вместимость: {a[call.from_user.id]["weight"]}\n'
+        inv_items = "\n".join([f"{things[x][0]}: {a[call.from_user.id]['inventory'][x]}" for x in a[call.from_user.id]["inventory"].keys() if 'recipe' not in x])
     if not a[call.from_user.id]["inventory"].keys():
         inv_items = 'Пусто'
     bot.edit_message_text(chat_id=call.from_user.id, message_id=call.message.message_id,
-                          text=f'Инвентарь:\n{inv_items}',
+                          text=f'{text}Инвентарь:\n{inv_items}',
                           reply_markup=keyboard)
 
 
@@ -291,6 +391,24 @@ def minus_char(chat_id, who, x):
             a[chat_id][who + '_bd']['hp'] = min(hp_minus, 100)
         else:
             a[chat_id][who + '_bd']['hp'] = max(hp_minus, 0)
+    check_emoji(chat_id, who)
+    
+
+def check_emoji(chat_id, who):
+    if a[chat_id][who + '_bd']['immunity'] == 100:
+        a[chat_id][who + '_bd']['emoji'] = '😌'
+    elif a[chat_id][who + '_bd']['immunity'] >= 80:
+        a[chat_id][who + '_bd']['emoji'] = '🙂'
+    elif a[chat_id][who + '_bd']['immunity'] >= 60:
+        a[chat_id][who + '_bd']['emoji'] = '😐'
+    elif a[chat_id][who + '_bd']['immunity'] >= 40:
+        a[chat_id][who + '_bd']['emoji'] = '😕'
+    elif a[chat_id][who + '_bd']['immunity'] >= 20:
+        a[chat_id][who + '_bd']['emoji'] = '😟'
+    elif a[chat_id][who + '_bd']['immunity'] >= 15:
+        a[chat_id][who + '_bd']['emoji'] = '🤢'
+    elif a[chat_id][who + '_bd']['immunity'] == 0:
+        a[chat_id][who + '_bd']['emoji'] = '🤮'
 
 
 def check_death(chat_id, who):
@@ -553,6 +671,8 @@ def get_bunker_keyboard(chat_id):
                                                         callback_data='bunker_family_sister'))
     bunker.add(*butts)
     bunker.add(telebot.types.InlineKeyboardButton(text='Инвентарь', callback_data='bunker_inventory'))
+    bunker.add(telebot.types.InlineKeyboardButton(text='Крафт', callback_data='bunker_craft'),
+               telebot.types.InlineKeyboardButton(text='Постройка', callback_data='bunker_build'))
     bunker.add(telebot.types.InlineKeyboardButton(text='Журнал', callback_data='bunker_journal'),
                telebot.types.InlineKeyboardButton(text='Следующий день', callback_data='bunker_next_day'))
     bunker.add(telebot.types.InlineKeyboardButton(text='Пустошь', callback_data='bunker_wasteland'))
@@ -807,8 +927,7 @@ def insert_bd_family(chat_id, who):
 
 
 def get_data_from_bd(chat_id):
-    if chat_id not in a.keys():
-        a[chat_id] = a[0]
+    a[chat_id] = a[0]
     q = """Select {} from {} where chat_id = {}"""
     bd_family(chat_id, cur.execute(q.format('*', 'dad', chat_id)).fetchone(), 'dad')
     bd_family(chat_id, cur.execute(q.format('*', 'mother', chat_id)).fetchone(), 'mother')
@@ -826,6 +945,8 @@ def get_data_from_bd(chat_id):
     a[chat_id]['brother'] = cur.execute(q.format('brother', 'saves', chat_id)).fetchone()[0]
     a[chat_id]['sister'] = cur.execute(q.format('sister', 'saves', chat_id)).fetchone()[0]
     a[chat_id]['day'] = cur.execute(q.format('day', 'saves', chat_id)).fetchone()[0]
+    a[chat_id]['place'] = cur.execute(q.format('place', 'saves', chat_id)).fetchone()[0]
+    a[chat_id]['weight'] = cur.execute(q.format('weight', 'saves', chat_id)).fetchone()[0]
 
 
 def edit_message_for_family(call, who=None):
@@ -870,9 +991,9 @@ def save_update_to_bd(chat_id):
     if chat_id in [int(x[0]) for x in cur.execute("""Select chat_id from saves""").fetchall()]:
         inventory = ';'.join([f'{x}:{a[chat_id]["inventory"][x]}' for x in a[chat_id]['inventory'].keys()])
         cur.execute(
-            """UPDATE saves SET chat_id = ?, inventory = ?, name = ?, mother = ?, dad = ?, brother = ?, sister = ?, day = ? WHERE chat_id = ?""",
+            """UPDATE saves SET chat_id = ?, inventory = ?, name = ?, mother = ?, dad = ?, brother = ?, sister = ?, day = ?, place = ?, weight = ? WHERE chat_id = ?""",
             (chat_id, inventory, a[chat_id]['name'], a[chat_id]['mother'], a[chat_id]['dad'],
-             a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], chat_id))
+             a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], a[chat_id]['place'], a[chat_id]['weight'], chat_id))
     else:
         a[chat_id] = a[0]
         if family.get(chat_id, False):
@@ -886,9 +1007,9 @@ def save_update_to_bd(chat_id):
                 a[chat_id]['mother'] = 1
             del family[chat_id]
         inventory = ';'.join([f'{x}:{a[chat_id]["inventory"][x]}' for x in a[chat_id]['inventory'].keys()])
-        cur.execute("""INSERT INTO saves VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        cur.execute("""INSERT INTO saves VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (chat_id, inventory, a[chat_id]['name'], a[chat_id]['mother'], a[chat_id]['dad'],
-                     a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day']))
+                     a[chat_id]['brother'], a[chat_id]['sister'], a[chat_id]['day'], a[chat_id]['place'], a[chat_id]['weight']))
     create_family_bd(chat_id)
     con.commit()
 
@@ -1134,5 +1255,5 @@ try:
     bot.polling()
 except Exception as e:
     print(e)
-    exit_prog()
+    # exit_prog()
 

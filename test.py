@@ -1,6 +1,5 @@
-a = 50
-x = [10, 20]
-if int(x[0]) > 0:
-    a += min(a + int(x[0]), 100)
-else:
-    a += max(a - int(x[0]), 0)
+things = {'sticks': ('палки', 1),
+          'woodboards': ('доски', 5)}
+a = {'recipe_sticks': 1, 'sticks': 3}
+inv_items = "\n".join([f"{things[x][0]}: {a[x]}" for x in a.keys() if 'recipe' not in x])
+print(inv_items)
